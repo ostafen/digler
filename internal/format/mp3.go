@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 )
 
 // mp3Header represents the parsed information from a 4-byte MP3 frame header.
@@ -54,12 +55,11 @@ func parseSynchsafeInt(b []byte) (int, error) {
 // skipID3v2Tag checks for an ID3v2 tag at the current buffer offset and calculates its size.
 // It returns the number of bytes to skip (0 if no tag) and an error, if any.
 // This function is intended for use ONLY at the very beginning of the buffer.
-func skipID3v2Tag(data []byte, currentOffset int) (int, error) {
-	if currentOffset+10 > len(data) {
-		return 0, nil // Not enough data for ID3 header
+func skipID3v2Tag(r *Reader) (int, error) {
+	headerBytes, err := r.Peek(10)
+	if err != nil {
+		return 0, err
 	}
-
-	headerBytes := data[currentOffset : currentOffset+10]
 
 	// Check for "ID3" identifier
 	if !bytes.Equal(headerBytes[0:3], []byte("ID3")) {
@@ -69,17 +69,14 @@ func skipID3v2Tag(data []byte, currentOffset int) (int, error) {
 	// Get tag size (bytes 6-9) - this is a synchsafe integer
 	tagSize, err := parseSynchsafeInt(headerBytes[6:10])
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse ID3v2 tag size at offset %d: %w", currentOffset, err)
+		return 0, fmt.Errorf("failed to parse ID3v2 tag size: %w", err)
 	}
 
 	// Total bytes to skip: 10 bytes for the header + tagSize
 	totalSkipBytes := 10 + tagSize
 
-	if currentOffset+totalSkipBytes > len(data) {
-		return 0, fmt.Errorf("ID3v2 tag declared size (%d) extends beyond buffer end", totalSkipBytes)
-	}
-
-	return totalSkipBytes, nil
+	err = r.Discard(totalSkipBytes)
+	return totalSkipBytes, err
 }
 
 // parseMP3Header attempts to parse a 4-byte MP3 frame header.
@@ -175,69 +172,54 @@ func parseMP3Header(headerBytes []byte) (mp3Header, bool) {
 // of the detected stream within the buffer, or 0 and an error if no
 // valid stream is found. An optional ID3v2 tag at the very beginning
 // is allowed and skipped.
-func ScanMP3(buf []byte) (uint64, error) {
-	dataLen := len(buf)
-	if dataLen < 4 { // We need at least 4 bytes to check for a header
-		return 0, fmt.Errorf("input buffer too small to contain MP3 frames")
-	}
-
-	var currentOffset int // Tracks the current position in the buffer
+func ScanMP3(r *Reader) (uint64, error) {
+	var n int // Tracks the current position in the buffer
 
 	// 1. Check for and skip an initial ID3v2 tag (if present)
 	// This is the only non-audio content allowed at the very start of the stream.
-	skippedBytes, err := skipID3v2Tag(buf, 0)
+	skippedBytes, err := skipID3v2Tag(r)
 	if err != nil {
 		return 0, fmt.Errorf("error processing initial ID3v2 tag: %w", err)
 	}
-	currentOffset += skippedBytes // Move past the ID3v2 tag
+	n += skippedBytes // Move past the ID3v2 tag
 
-	// 2. The very next 4 bytes *must* be a valid MP3 frame header
-	if currentOffset+4 > dataLen {
-		return 0, fmt.Errorf("buffer too short for MP3 header after initial tag check (current offset: %d)", currentOffset)
-	}
-
-	headerBytes := buf[currentOffset : currentOffset+4]
-	header, ok := parseMP3Header(headerBytes)
-	if !ok {
-		return 0, fmt.Errorf("no valid MP3 header found at the expected start of the stream")
-	}
-
-	carvedFramesInStream := 0
+	var headerBytes [4]byte
+	numFrames := 0
 
 	// 3. Continue parsing contiguous MP3 frames
 	// currentOffset now points to the start of the first valid MP3 frame.
 	// We will advance currentOffset frame by frame to find the end of the stream.
 	for {
-		// Ensure enough data for the current frame header
-		if currentOffset+4 > dataLen {
-			break // End of buffer, no more frames
-		}
-
 		// Re-parse header at currentOffset (this is the same as `header` for the first loop iteration)
 		// This is critical for subsequent iterations to get the next frame's header.
-		headerBytes = buf[currentOffset : currentOffset+4]
-		header, ok = parseMP3Header(headerBytes)
+		_, err = r.Read(headerBytes[:])
+		if err != nil && err != io.EOF {
+			return 0, err
+		}
+		if err == io.EOF {
+			break
+		}
 
+		header, ok := parseMP3Header(headerBytes[:])
 		if !ok {
 			// If the header is invalid, the contiguous stream ends here.
 			break
 		}
 
-		// Check if the full frame extends beyond the buffer
-		if currentOffset+header.FrameSize > dataLen {
-			break // Frame extends past end of data
+		if err := r.Discard(header.FrameSize - 4); err != nil {
+			return 0, err
 		}
 
-		carvedFramesInStream++
-		currentOffset += header.FrameSize // Advance to the start of the next potential frame
+		n += header.FrameSize
+		numFrames++
 	}
 
 	// 4. Final Validation and Return
 	// A stream with only 1 frame is highly suspicious and often a false positive.
 	// Requiring at least 2 frames provides more confidence.
 	const MinimumRequiredFrames = 2
-	if carvedFramesInStream < MinimumRequiredFrames {
-		return 0, fmt.Errorf("detected MP3 stream is too short (only %d frames)", carvedFramesInStream)
+	if numFrames < MinimumRequiredFrames {
+		return 0, fmt.Errorf("detected MP3 stream is too short (only %d frames)", numFrames)
 	}
-	return uint64(currentOffset), nil
+	return uint64(n), nil
 }

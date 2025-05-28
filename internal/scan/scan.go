@@ -2,7 +2,6 @@ package scan
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/ostafen/diglet/internal/disk"
 	"github.com/ostafen/diglet/internal/format"
-	"github.com/ostafen/diglet/internal/mmap"
 )
 
 func Scan(filePath, dumpDir string) error {
@@ -34,11 +32,13 @@ func Scan(filePath, dumpDir string) error {
 }
 
 func ScanPartition(p *disk.Partition, filePath, dumpDir string) error {
-	mmapFile, err := mmap.NewMmapFileRegion(filePath, int(p.Offset), int(p.Size))
+	f, err := os.Open(filePath)
 	if err != nil {
 		return err
 	}
-	defer mmapFile.Close()
+	defer f.Close()
+
+	r := io.NewSectionReader(f, int64(p.Offset), int64(p.Size))
 
 	if dumpDir != "" {
 		if err := os.MkdirAll(dumpDir, 0755); err != nil {
@@ -50,20 +50,25 @@ func ScanPartition(p *disk.Partition, filePath, dumpDir string) error {
 
 	sc := format.NewScanner(uint64(p.BlockSize))
 
-	for finfo := range sc.Scan(mmapFile.Data) {
+	for finfo := range sc.Scan(r, p.Size) {
 		log.Printf("found %s file at block %d, size %d bytes\n", finfo.Format, finfo.Offset/uint64(p.BlockSize), finfo.Size)
 
 		if dumpDir != "" {
 			numFiles++
 
 			fileName := fmt.Sprintf("%d.%s", numFiles, finfo.Format)
-			dumpFile(dumpDir, fileName, mmapFile.Data[finfo.Offset:finfo.Offset+finfo.Size])
+
+			fileReader := io.NewSectionReader(r, int64(finfo.Offset), int64(finfo.Size))
+			err := dumpFile(dumpDir, fileName, fileReader)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func dumpFile(dumpDir string, fileName string, data []byte) error {
+func dumpFile(dumpDir string, fileName string, r io.Reader) error {
 	f, err := os.Create(filepath.Join(dumpDir, fileName))
 	if err != nil {
 		return fmt.Errorf("failed to create file %q: %w", fileName, err)
@@ -71,16 +76,11 @@ func dumpFile(dumpDir string, fileName string, data []byte) error {
 	defer f.Close()
 
 	w := bufio.NewWriterSize(f, 1024*1024) // 1MB buffer
-	r := bytes.NewReader(data)
 
 	if _, err := io.Copy(w, r); err != nil {
 		return err
 	}
-
-	if err := w.Flush(); err != nil {
-		return err
-	}
-	return nil
+	return w.Flush()
 }
 
 func DiscoverPartitions(path string) ([]disk.Partition, error) {

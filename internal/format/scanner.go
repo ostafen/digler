@@ -1,6 +1,11 @@
 package format
 
-import "fmt"
+import (
+	"bufio"
+	"fmt"
+	"io"
+	"math"
+)
 
 type Scanner struct {
 	headers   []Header
@@ -24,10 +29,10 @@ func (sc *Scanner) AddHeader(header Header) {
 	sc.headers = append(sc.headers, header)
 }
 
-func (sc *Scanner) Scan(data []byte) func(yield func(FileInfo) bool) {
+func (sc *Scanner) Scan(r io.ReaderAt, limit uint64) func(yield func(FileInfo) bool) {
 	return func(yield func(FileInfo) bool) {
-		for blockOffset := uint64(0); blockOffset < uint64(len(data)); {
-			finfo, err := sc.scanFile(data, blockOffset)
+		for blockOffset := uint64(0); blockOffset < limit; {
+			finfo, err := sc.scanFile(r, blockOffset)
 			if err == nil {
 				if !yield(finfo) {
 					return
@@ -41,9 +46,19 @@ func (sc *Scanner) Scan(data []byte) func(yield func(FileInfo) bool) {
 	}
 }
 
-func (sc *Scanner) scanFile(data []byte, startOffset uint64) (FileInfo, error) {
+func (sc *Scanner) scanFile(r io.ReaderAt, startOffset uint64) (FileInfo, error) {
 	for _, header := range sc.headers {
-		endOffset, err := header.ScanFile(data[startOffset:])
+		sr := NewReader(
+			bufio.NewReader(
+				io.NewSectionReader(
+					r,
+					int64(startOffset),
+					math.MaxInt64,
+				),
+			),
+		)
+
+		endOffset, err := header.ScanFile(sr)
 		if err == nil {
 			return FileInfo{
 				Offset: startOffset,
