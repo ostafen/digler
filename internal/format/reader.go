@@ -48,3 +48,7 @@ func (r *Reader) Discard(n int) (int, error) {
 func (r *Reader) Peek(n int) ([]byte, error) {
 	return r.r.Peek(n)
 }
+
+func (r *Reader) BytesRead() int {
+	return r.n
+}

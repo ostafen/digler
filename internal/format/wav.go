@@ -19,11 +19,12 @@ const (
 // The reader's position will be at the end of the WAV data upon successful return.
 func ScanWAV(r *Reader) (uint64, error) {
 	// We'll use a small buffer for reading headers and sizes.
-	headerBuf := make([]byte, 8) // For ChunkID and ChunkSize
+
+	var headerBuf [8]byte // For ChunkID and ChunkSize
 
 	// 1. Check RIFF chunk
 	// Read Offset 0-3: ChunkID "RIFF" and Offset 4-7: ChunkSize
-	n, err := io.ReadFull(r, headerBuf)
+	n, err := io.ReadFull(r, headerBuf[:])
 	if err != nil {
 		return 0, fmt.Errorf("failed to read RIFF chunk header: %w", err)
 	}
@@ -54,7 +55,7 @@ func ScanWAV(r *Reader) (uint64, error) {
 	// 2. Find and parse 'fmt ' sub-chunk
 	fmtChunkFound := false
 	for bytesRead < uint64(riffChunkSize)+8 { // Ensure we don't read beyond the declared RIFF chunk
-		n, err = io.ReadFull(r, headerBuf)
+		n, err = io.ReadFull(r, headerBuf[:])
 		if err != nil {
 			if err == io.EOF && bytesRead+uint64(n) < uint64(riffChunkSize)+8 {
 				// We hit EOF before fully parsing the RIFF chunk based on its declared size.
@@ -106,7 +107,7 @@ func ScanWAV(r *Reader) (uint64, error) {
 
 	// Continue scanning from where we left off, respecting the overall RIFF chunk size
 	for bytesRead < uint64(riffChunkSize)+8 {
-		n, err = io.ReadFull(r, headerBuf)
+		n, err = io.ReadFull(r, headerBuf[:])
 		if err != nil {
 			if err == io.EOF && bytesRead+uint64(n) < uint64(riffChunkSize)+8 {
 				// Hit EOF before finding 'data' chunk, even if RIFF suggested more data.

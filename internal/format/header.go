@@ -16,29 +16,28 @@ var DefaultHeaders = []Header{
 		Ext:      "wav",
 		ScanFile: ScanWAV,
 	},
-	/*
-		{
-			Ext:      "au",
-			ScanFile: ScanSunAudio,
-		},
-		{
-			Ext:      "wma",
-			ScanFile: ScanWMA,
-		},
-		{
-			Ext:      "jpeg",
-			ScanFile: ScanJPEG,
-		},
-		{
-			Ext:      "png",
-			ScanFile: ScanPNG,
-		},
-		{
-			Ext:      "gif",
-			ScanFile: ScanGIF,
-		},
-		{
-			Ext:      "zip",
-			ScanFile: ScanZIP,
-		},*/
+	{
+		Ext:      "au",
+		ScanFile: ScanSunAudio,
+	},
+	/*{
+		Ext:      "wma",
+		ScanFile: ScanWMA,
+	},*/
+	{
+		Ext:      "jpeg",
+		ScanFile: ScanJPEG,
+	},
+	/*{
+		Ext:      "png",
+		ScanFile: ScanPNG,
+	},
+	{
+		Ext:      "gif",
+		ScanFile: ScanGIF,
+	},
+	{
+		Ext:      "zip",
+		ScanFile: ScanZIP,
+	},*/
 }
