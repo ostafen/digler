@@ -12,11 +12,11 @@ var DefaultHeaders = []Header{
 		ScanFile: ScanMP3,
 	},
 
+	{
+		Ext:      "wav",
+		ScanFile: ScanWAV,
+	},
 	/*
-		{
-			Ext:      "wav",
-			ScanFile: ScanWAV,
-		},
 		{
 			Ext:      "au",
 			ScanFile: ScanSunAudio,

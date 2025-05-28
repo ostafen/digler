@@ -75,7 +75,7 @@ func skipID3v2Tag(r *Reader) (int, error) {
 	// Total bytes to skip: 10 bytes for the header + tagSize
 	totalSkipBytes := 10 + tagSize
 
-	err = r.Discard(totalSkipBytes)
+	_, err = r.Discard(totalSkipBytes)
 	return totalSkipBytes, err
 }
 
@@ -206,7 +206,7 @@ func ScanMP3(r *Reader) (uint64, error) {
 			break
 		}
 
-		if err := r.Discard(header.FrameSize - 4); err != nil {
+		if _, err := r.Discard(header.FrameSize - 4); err != nil {
 			return 0, err
 		}
 

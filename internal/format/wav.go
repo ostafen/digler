@@ -1,9 +1,9 @@
 package format
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 )
 
 // The size of a standard 16-byte WAV 'fmt ' sub-chunk.
@@ -13,109 +13,160 @@ const (
 	fmtChunkSizePCM  = 16 // Expected size for PCM audio in the 'fmt ' chunk
 )
 
-// ScanWAV scans the input byte buffer strictly from the beginning
-// for a valid WAV file. It returns the end offset (exclusive) of the
-// detected WAV data within the buffer, or 0 and an error if no
-// valid WAV file is found at the beginning.
-func ScanWAV(buf []byte) (uint64, error) {
-	bufLen := len(buf)
-
-	if bufLen < minWAVHeaderSize {
-		return 0, fmt.Errorf("buffer too small (%d bytes) to contain a minimum WAV header (%d bytes)", bufLen, minWAVHeaderSize)
-	}
+// ScanWAV scans the input io.Reader strictly from the beginning
+// for a valid WAV file. It returns the total size of the detected
+// WAV data, or 0 and an error if no valid WAV file is found at the beginning.
+// The reader's position will be at the end of the WAV data upon successful return.
+func ScanWAV(r *Reader) (uint64, error) {
+	// We'll use a small buffer for reading headers and sizes.
+	headerBuf := make([]byte, 8) // For ChunkID and ChunkSize
 
 	// 1. Check RIFF chunk
-	// Offset 0-3: ChunkID "RIFF"
-	if !bytes.Equal(buf[0:4], []byte("RIFF")) {
-		return 0, fmt.Errorf("buffer does not start with RIFF signature")
+	// Read Offset 0-3: ChunkID "RIFF" and Offset 4-7: ChunkSize
+	n, err := io.ReadFull(r, headerBuf)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read RIFF chunk header: %w", err)
+	}
+	if n < 8 {
+		return 0, fmt.Errorf("reader too small (%d bytes) to contain RIFF chunk header", n)
 	}
 
-	// Offset 4-7: ChunkSize (Total file size - 8 bytes)
-	// This is Little Endian
-	riffChunkSize := binary.LittleEndian.Uint32(buf[4:8])
-	if riffChunkSize+8 > uint32(bufLen) {
-		return 0, fmt.Errorf("declared RIFF ChunkSize (%d) extends beyond buffer length", riffChunkSize)
+	if string(headerBuf[0:4]) != "RIFF" {
+		return 0, fmt.Errorf("reader does not start with RIFF signature")
 	}
-	// Note: We don't necessarily need to use riffChunkSize for the carve end
-	// because a file could be truncated. We will determine the end based on
-	// the actual 'data' chunk size.
 
-	// Offset 8-11: Format "WAVE"
-	if !bytes.Equal(buf[8:12], []byte("WAVE")) {
+	// riffChunkSize is the total file size minus 8 bytes (RIFF ChunkID and ChunkSize themselves).
+	// This includes WAVE ID, fmt chunk, data chunk, and any other chunks.
+	riffChunkSize := binary.LittleEndian.Uint32(headerBuf[4:8])
+
+	// Read Offset 8-11: Format "WAVE"
+	waveFormatBuf := make([]byte, 4)
+	_, err = io.ReadFull(r, waveFormatBuf)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read WAVE format identifier: %w", err)
+	}
+	if string(waveFormatBuf) != "WAVE" {
 		return 0, fmt.Errorf("missing WAVE format identifier")
 	}
 
+	bytesRead := uint64(12) // RIFF (8 bytes) + WAVE (4 bytes)
+
 	// 2. Find and parse 'fmt ' sub-chunk
-	// This chunk should typically follow the 'WAVE' format, but its exact offset
-	// can vary due to optional chunks before it. We'll scan for it.
-	fmtChunkOffset := -1
-	currentScanOffset := 12 // Start scanning after "WAVE"
+	fmtChunkFound := false
+	for bytesRead < uint64(riffChunkSize)+8 { // Ensure we don't read beyond the declared RIFF chunk
+		n, err = io.ReadFull(r, headerBuf)
+		if err != nil {
+			if err == io.EOF && bytesRead+uint64(n) < uint64(riffChunkSize)+8 {
+				// We hit EOF before fully parsing the RIFF chunk based on its declared size.
+				// This indicates a truncated file, but we should still find fmt and data if possible.
+				break
+			}
+			return 0, fmt.Errorf("failed to read chunk header while searching for 'fmt ': %w", err)
+		}
 
-	for currentScanOffset+8 <= bufLen { // Enough space for SubchunkID and SubchunkSize
-		chunkID := buf[currentScanOffset : currentScanOffset+4]
-		chunkSize := binary.LittleEndian.Uint32(buf[currentScanOffset+4 : currentScanOffset+8])
+		chunkID := string(headerBuf[0:4])
+		chunkSize := binary.LittleEndian.Uint32(headerBuf[4:8])
+		bytesRead += 8
 
-		if bytes.Equal(chunkID, []byte("fmt ")) {
-			fmtChunkOffset = currentScanOffset
+		if chunkID == "fmt " {
 			if chunkSize != fmtChunkSizePCM {
 				return 0, fmt.Errorf("unsupported 'fmt ' chunk size (%d), expected %d for PCM", chunkSize, fmtChunkSizePCM)
 			}
-			if currentScanOffset+8+int(chunkSize) > bufLen {
-				return 0, fmt.Errorf("'fmt ' chunk declared size (%d) extends beyond buffer length", chunkSize)
+
+			// Read the fmt chunk data
+			fmtDataBuf := make([]byte, chunkSize)
+			n, err = io.ReadFull(r, fmtDataBuf)
+			if err != nil {
+				return 0, fmt.Errorf("failed to read 'fmt ' chunk data: %w", err)
 			}
-			break // Found 'fmt ' chunk
+			bytesRead += uint64(n)
+			fmtChunkFound = true
+			break // Found 'fmt ' chunk, move to data
 		}
 
-		// Move to the next chunk
-		currentScanOffset += 8 + int(chunkSize) // Advance past current chunk's header and data
-		if currentScanOffset >= bufLen {
-			break // Reached end of buffer while searching for 'fmt '
+		// Skip over the current chunk's data
+		skipped, err := r.Discard(int(chunkSize))
+		if err != nil {
+			if err == io.EOF && skipped < int(chunkSize) {
+				// Truncated chunk data, but we might still find 'data' if it's earlier.
+				break
+			}
+			return 0, fmt.Errorf("failed to skip chunk data while searching for 'fmt ': %w", err)
 		}
+		bytesRead += uint64(skipped)
 	}
 
-	if fmtChunkOffset == -1 {
+	if !fmtChunkFound {
 		return 0, fmt.Errorf("missing 'fmt ' sub-chunk")
 	}
 
-	// At this point, we've located and validated the 'fmt ' chunk.
-	// The standard WAV header is at least 44 bytes.
-	// We proceed from the end of the 'fmt ' chunk.
-	currentScanOffset = fmtChunkOffset + 8 + fmtChunkSizePCM // Move past fmt chunk header and data
-
 	// 3. Find and parse 'data' sub-chunk
-	dataChunkOffset := -1
+	dataChunkFound := false
 	dataChunkSize := uint32(0)
 
-	for currentScanOffset+8 <= bufLen { // Enough space for SubchunkID and SubchunkSize
-		chunkID := buf[currentScanOffset : currentScanOffset+4]
-		chunkSize := binary.LittleEndian.Uint32(buf[currentScanOffset+4 : currentScanOffset+8])
+	// Continue scanning from where we left off, respecting the overall RIFF chunk size
+	for bytesRead < uint64(riffChunkSize)+8 {
+		n, err = io.ReadFull(r, headerBuf)
+		if err != nil {
+			if err == io.EOF && bytesRead+uint64(n) < uint64(riffChunkSize)+8 {
+				// Hit EOF before finding 'data' chunk, even if RIFF suggested more data.
+				break
+			}
+			return 0, fmt.Errorf("failed to read chunk header while searching for 'data': %w", err)
+		}
 
-		if bytes.Equal(chunkID, []byte("data")) {
-			dataChunkOffset = currentScanOffset
+		chunkID := string(headerBuf[0:4])
+		chunkSize := binary.LittleEndian.Uint32(headerBuf[4:8])
+		bytesRead += 8
+
+		if chunkID == "data" {
 			dataChunkSize = chunkSize
+			dataChunkFound = true
+			// We don't need to read the actual audio data, just its size.
+			// We just need to know how much data *should* be there.
+			// The reader's position is now at the start of the data payload.
 			break // Found 'data' chunk
 		}
 
-		// Move to the next chunk
-		currentScanOffset += 8 + int(chunkSize) // Advance past current chunk's header and data
-		if currentScanOffset >= bufLen {
-			break // Reached end of buffer while searching for 'data'
+		// Skip over the current chunk's data
+		skipped, err := io.CopyN(io.Discard, r, int64(chunkSize))
+		if err != nil {
+			if err == io.EOF && skipped < int64(chunkSize) {
+				// Truncated chunk data, can't determine full WAV size
+				bytesRead += uint64(skipped)
+				return bytesRead, nil // Return what was read before truncation
+			}
+			return 0, fmt.Errorf("failed to skip chunk data while searching for 'data': %w", err)
 		}
+		bytesRead += uint64(skipped)
 	}
 
-	if dataChunkOffset == -1 {
+	if !dataChunkFound {
 		return 0, fmt.Errorf("missing 'data' sub-chunk")
 	}
 
-	// Calculate the end offset of the actual audio data.
-	// This is the start of the 'data' chunk + 8 bytes for its header + its declared size.
-	audioDataEndOffset := dataChunkOffset + 8 + int(dataChunkSize)
+	// The total WAV size is bytesRead (which is up to the start of data payload) + dataChunkSize.
+	totalWAVSize := bytesRead + uint64(dataChunkSize)
 
-	// Ensure the declared data chunk size does not exceed the buffer length.
-	if audioDataEndOffset > bufLen {
-		// If truncated, the valid data ends at bufLen
-		return uint64(bufLen), nil // Return what's available
+	// If the RIFF chunk size was smaller than the calculated totalWAVSize,
+	// it means the file is truncated, and the actual valid data ends at the RIFF chunk boundary.
+	if totalWAVSize > uint64(riffChunkSize)+8 {
+		return uint64(riffChunkSize) + 8, nil // Return the size declared by RIFF if data chunk extends beyond it.
 	}
 
-	return uint64(audioDataEndOffset), nil
+	// If the user wants to read the entire data chunk after this, they can do so
+	// using the returned totalWAVSize or by seeking the reader if it supports it.
+	// For this function, we assume the reader continues.
+	// We need to advance the reader past the data chunk for the returned bytesRead to be accurate.
+	skipped, err := io.CopyN(io.Discard, r, int64(dataChunkSize))
+	if err != nil {
+		if err == io.EOF && skipped < int64(dataChunkSize) {
+			// Data chunk is truncated. The valid WAV ends here.
+			return bytesRead + uint64(skipped), nil
+		}
+		return 0, fmt.Errorf("failed to skip 'data' chunk: %w", err)
+	}
+	bytesRead += uint64(skipped)
+
+	return totalWAVSize, nil
 }

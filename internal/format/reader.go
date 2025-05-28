@@ -40,9 +40,9 @@ func (r *Reader) Read(buf []byte) (int, error) {
 	return n, err
 }
 
-func (r *Reader) Discard(n int) error {
-	_, err := io.CopyN(io.Discard, r.r, int64(n))
-	return err
+func (r *Reader) Discard(n int) (int, error) {
+	copied, err := io.CopyN(io.Discard, r.r, int64(n))
+	return int(copied), err
 }
 
 func (r *Reader) Peek(n int) ([]byte, error) {
