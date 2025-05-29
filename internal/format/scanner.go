@@ -44,7 +44,7 @@ func (sc *Scanner) Scan(r io.ReaderAt, limit uint64) func(yield func(FileInfo) b
 
 		for blockOffset := uint64(0); blockOffset < limit; {
 			n, err := r.ReadAt(sc.buf, int64(blockOffset))
-			if err != nil && err == io.EOF {
+			if err != nil && err != io.EOF {
 				return
 			}
 			n = roundToMul(n, sc.blockSize) / sc.blockSize

@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 )
 
 // GUIDs for ASF objects (WMA/WMV are built on ASF)
@@ -71,51 +70,29 @@ const (
 )
 
 // ScanWMA attempts to validate a WMA file in ASF format and return its total size.
-// It strictly expects a valid ASF Header Object at the beginning of the reader,
+// It strictly expects a valid ASF Header Object at the beginning of the buffer,
 // then parses its internal objects to find the definitive file size from the
 // ASF File Properties Object.
 func ScanWMA(r *Reader) (uint64, error) {
-	var totalBytesRead uint64 // Track the total number of bytes read from the reader
-
-	// Buffer to read GUIDs (16 bytes)
-	guidBuf := make([]byte, 16)
-	// Buffer to read sizes (8 bytes)
-	sizeBuf := make([]byte, 8)
-	// Buffer to read counts (4 bytes)
-	countBuf := make([]byte, 4)
-
-	// 1. Read and Verify ASF Header Object GUID
-	if _, err := io.ReadFull(r, guidBuf); err != nil {
-		return 0, fmt.Errorf("failed to read ASF header GUID: %w", err)
-	}
-	totalBytesRead += 16
-
-	if !bytes.Equal(guidBuf, asfHeaderGUID) {
-		return 0, errors.New("ASF header GUID not found at reader start")
+	var buf [minASFHeaderObjSize]byte
+	_, err := r.Read(buf[:])
+	if err != nil {
+		return 0, nil
 	}
 
-	// 2. Read critical fields from the ASF Header Object
+	// 2. Verify ASF Header Object GUID
+	if !bytes.Equal(buf[:16], asfHeaderGUID) {
+		return 0, errors.New("ASF header GUID not found at buffer start")
+	}
+
+	// 3. Read critical fields from the ASF Header Object
 	// ObjectSize (total size of this header object) is at offset 16.
-	if _, err := io.ReadFull(r, sizeBuf); err != nil {
-		return 0, fmt.Errorf("failed to read ASF header object size: %w", err)
-	}
-	totalBytesRead += 8
-	headerObjectSize := binary.LittleEndian.Uint64(sizeBuf)
-
+	headerObjectSize := binary.LittleEndian.Uint64(buf[16:24])
 	// NbrHeaderObj (number of top-level objects in the header section) is at offset 24.
-	if _, err := io.ReadFull(r, countBuf); err != nil {
-		return 0, fmt.Errorf("failed to read ASF header object count: %w", err)
-	}
-	totalBytesRead += 4
-	numHeaderObjects := binary.LittleEndian.Uint32(countBuf)
-
-	// Read and discard Reserved1 and Reserved2 (1 byte each)
-	if _, err := io.ReadFull(r, make([]byte, 2)); err != nil {
-		return 0, fmt.Errorf("failed to read ASF header reserved bytes: %w", err)
-	}
-	totalBytesRead += 2
+	numHeaderObjects := binary.LittleEndian.Uint32(buf[24:28])
 
 	// Basic validation of the initial header object
+	// The C code checked `headerObjectSize < 30` and `numHeaderObjects < 4`.
 	if headerObjectSize < minASFHeaderObjSize || numHeaderObjects < 4 {
 		return 0, errors.New("invalid ASF Header Object structure or too few internal objects")
 	}
@@ -124,134 +101,133 @@ func ScanWMA(r *Reader) (uint64, error) {
 	var isWMAStreamFound bool // Flag to indicate if a WMA stream type is found
 
 	// 4. Iterate through the header's sub-objects
-	// `remainingHeaderBytes` tracks how many bytes are left within the main ASF Header Object.
-	// We've already read `totalBytesRead` bytes of the initial header object.
-	remainingHeaderBytes := headerObjectSize - totalBytesRead
+	// `currentOffset` tracks the start of the current sub-object being parsed.
 
-	// Loop through `numHeaderObjects` or until we run out of valid bytes within the declared header.
+	currentOffset := uint64(minASFHeaderObjSize) // Start after the initial ASF Header Object's fixed part
+
+	// Loop through `numHeaderObjects` or until we run out of valid buffer within the declared header.
 	for i := uint32(0); i < numHeaderObjects; i++ {
-		// Ensure there's enough bytes left to read the next object's basic header (GUID + ObjectSize).
-		if remainingHeaderBytes < minGeneralSubObjectHeaderSize {
-			break // Cannot read next object header, stop processing
+		// Ensure there's enough buffer to read the next object's basic header (GUID + ObjectSize).
+
+		//if currentOffset+minGeneralSubObjectHeaderSize > bufLen {
+		//	break // Cannot read next object header, stop processing
+		//}
+
+		// Also ensure the current object doesn't spill past the main Header Object's declared boundary.
+		if currentOffset+minGeneralSubObjectHeaderSize > headerObjectSize {
+			return 0, errors.New("malformed ASF header: sub-object extends beyond parent header")
+		}
+
+		_, err := r.Read(buf[:minGeneralSubObjectHeaderSize])
+		if err != nil {
+			return 0, err
 		}
 
 		// Read the sub-object's ID and Size
-		if _, err := io.ReadFull(r, guidBuf); err != nil {
-			return 0, fmt.Errorf("failed to read sub-object GUID: %w", err)
-		}
-		if _, err := io.ReadFull(r, sizeBuf); err != nil {
-			return 0, fmt.Errorf("failed to read sub-object size: %w", err)
-		}
-		objID := guidBuf
-		objSize := binary.LittleEndian.Uint64(sizeBuf)
-
-		totalBytesRead += minGeneralSubObjectHeaderSize
-		remainingHeaderBytes -= minGeneralSubObjectHeaderSize
+		objID := buf[:16]
+		objSize := binary.LittleEndian.Uint64(buf[16:24])
 
 		// Validate the sub-object's declared size
+		// C code used `objSize < 24 || objSize > 0x8000000000000000`. We'll use a pragmatic max.
+
 		const maxSafeObjectSize = uint64(1000 * 1024 * 1024 * 2) // 2GB as a sanity check
 		if objSize < minGeneralSubObjectHeaderSize || objSize > maxSafeObjectSize {
 			return 0, fmt.Errorf("invalid ASF internal object size: %d", objSize)
 		}
 
-		// Ensure the entire sub-object fits within the remaining header bytes.
-		if objSize > remainingHeaderBytes {
-			return 0, errors.New("malformed ASF header: sub-object extends beyond parent header boundary")
-		}
+		// Ensure the entire sub-object fits within the buffer. If not, the file is truncated.
+		//if currentOffset+objSize > bufLen {
+		//	return bufLen, nil // Return available length as per strict carving rules
+		//}
 
-		// Determine bytes to skip after processing the header of the current sub-object.
-		// objSize includes the 24 bytes we just read (GUID + ObjectSize).
-		bytesToSkipInObject := objSize - minGeneralSubObjectHeaderSize
+		// Also ensure it fits within the main Header Object's declared bounds.
+		if currentOffset+objSize > headerObjectSize {
+			return 0, errors.New("malformed ASF header: sub-object extends beyond header boundary")
+		}
 
 		// Check for specific ASF object types
 		if bytes.Equal(objID, asfFilePropGUID) {
+			buf, err := r.Peek(minFilePropObjSize)
+			if err != nil {
+				return 0, err
+			}
+
 			// Found the ASF File Properties Object
 			if objSize < minFilePropObjSize { // PhotoRec's C code check for min size 0x28 (40 bytes)
 				return 0, errors.New("invalid ASF File Properties Object size")
 			}
 
-			// Read up to the FileSize field.
-			// We already read 24 bytes (GUID + Size). Need to skip `filePropFileSizeOffset - 24` bytes.
-			skipBytes := filePropFileSizeOffset - minGeneralSubObjectHeaderSize
-			if skipBytes > 0 {
-				if _, err := io.ReadFull(r, make([]byte, skipBytes)); err != nil {
-					return 0, fmt.Errorf("failed to skip to file size field: %w", err)
-				}
-				//	totalBytesRead += skipBytes
-				//	bytesToSkipInObject -= skipBytes
+			// The file_size field is at offset `filePropFileSizeOffset` within this object.
+			fileSizeFieldOffset := currentOffset + filePropFileSizeOffset
+			//fileSizeFieldOffset+8 > bufLen ||
+			if fileSizeFieldOffset+8 > currentOffset+objSize {
+				return 0, errors.New("truncated ASF File Properties Object for 'file_size'")
 			}
 
-			// Read the file_size field (8 bytes).
-			if _, err := io.ReadFull(r, sizeBuf); err != nil {
-				return 0, fmt.Errorf("failed to read file size: %w", err)
-			}
-			totalBytesRead += 8
-			bytesToSkipInObject -= 8
+			totalFileSize = binary.LittleEndian.Uint64(buf[16 : 16+8])
 
-			totalFileSize = binary.LittleEndian.Uint64(sizeBuf)
-
+			// PhotoRec C code checked `size < 30+104` (30 is minASFHeaderObjSize). This is a heuristic.
 			// Let's ensure the reported totalFileSize is at least big enough for the basic header.
-			if totalFileSize < headerObjectSize {
+			if totalFileSize < headerObjectSize { // At least the size of the initial header block
 				return 0, errors.New("invalid total file size in File Properties Object")
 			}
-
 		} else if bytes.Equal(objID, asfStreamPropGUID) {
+			buf, err := r.Peek(minStreamPropObjSize)
+			if err != nil {
+				return 0, err
+			}
 			// Found the ASF Stream Properties Object
 			if objSize < minStreamPropObjSize { // PhotoRec's C code check for min size 0x28 (40 bytes)
 				return 0, errors.New("invalid ASF Stream Properties Object size")
 			}
 
-			// Read up to the StreamType GUID field.
-			// We already read 24 bytes (GUID + Size). Need to skip `streamPropStreamTypeOffset - 24` bytes.
-			skipBytes := streamPropStreamTypeOffset - minGeneralSubObjectHeaderSize
-			if skipBytes > 0 {
-				if _, err := io.ReadFull(r, make([]byte, skipBytes)); err != nil {
-					return 0, fmt.Errorf("failed to skip to stream type field: %w", err)
-				}
-				//totalBytesRead += skipBytes
-				//bytesToSkipInObject -= skipBytes
+			// Check if this is a WMA stream type
+			streamTypeFieldOffset := currentOffset + streamPropStreamTypeOffset
+
+			//streamTypeFieldOffset+16 > bufLen
+			if streamTypeFieldOffset+16 > currentOffset+objSize {
+				return 0, errors.New("truncated ASF Stream Properties Object for 'stream_type'")
 			}
 
-			// Read the stream_type GUID (16 bytes).
-			if _, err := io.ReadFull(r, guidBuf); err != nil {
-				return 0, fmt.Errorf("failed to read stream type GUID: %w", err)
-			}
-			totalBytesRead += 16
-			bytesToSkipInObject -= 16
-			streamType := guidBuf
-
+			fmt.Println("EHI")
+			streamType := buf[:16]
 			if bytes.Equal(streamType, streamTypeWMA) {
 				isWMAStreamFound = true
 			}
+			// We could check for WMV stream types here too if needed for broader ASF detection.
 		}
 
-		// Skip any remaining bytes in the current sub-object.
-		if bytesToSkipInObject > 0 {
-			if _, err := io.ReadFull(r, make([]byte, bytesToSkipInObject)); err != nil {
-				// This might be an io.EOF if the file is truncated, but we are within a declared object.
-				// For strict parsing, this is an error, implying a malformed or incomplete object.
-				return 0, fmt.Errorf("failed to skip remaining bytes in sub-object: %w", err)
-			}
-			totalBytesRead += bytesToSkipInObject
+		_, err = r.Discard(int(objSize - 24))
+		if err != nil {
+			return 0, err
 		}
-		remainingHeaderBytes -= objSize // Decrement remaining bytes in the main header
+		currentOffset += objSize // Move to the start of the next sub-object
 	}
 
 	// 5. Final Validation and Return
+
 	// We need to have found a definitive total file size from the File Properties Object.
+
 	if totalFileSize == 0 {
 		return 0, errors.New("WMA file size not definitively determined from ASF structure")
 	}
 
-	// The declared total file size must be at least as large as the combined size of all header objects parsed.
-	if totalFileSize < totalBytesRead {
+	// PhotoRec's C code also had a check: `if(size > 0 && size < offset_prop) return 0;`
+	// This means the declared total file size must be at least as large as the combined size of all header objects parsed.
+	if totalFileSize < currentOffset {
+
 		return 0, errors.New("inconsistent WMA file size: declared size is smaller than parsed header")
+
 	}
+
+	fmt.Println("HERE", totalFileSize, isWMAStreamFound)
 
 	// For a strict WMA file, we should confirm at least one WMA audio stream exists.
 	if !isWMAStreamFound {
 		return 0, errors.New("no WMA audio stream found in ASF header")
 	}
 
+	// If the calculated total file size extends beyond the buffer, it's a truncated file.
 	return totalFileSize, nil
+
 }
