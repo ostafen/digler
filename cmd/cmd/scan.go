@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/ostafen/diglet/internal/scan"
+	"github.com/ostafen/digler/internal/scan"
 	"github.com/spf13/cobra"
 )
 

@@ -1,4 +1,4 @@
-BINARY_NAME = diglet
+BINARY_NAME = digler
 MAIN_FILE = cmd/main.go
 OUTPUT_DIR = bin
 

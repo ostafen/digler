@@ -1,17 +1,25 @@
 package format
 
-type Header struct {
-	Ext       string // File extension, e.g., "mp3", "wav"
-	Signature []byte
-	ScanFile  func(r *Reader) (uint64, error)
+type FileHeader struct {
+	Ext        string // File extension, e.g., "mp3", "wav"
+	Signatures [][]byte
+	ScanFile   func(r *Reader) (uint64, error)
 }
 
-var DefaultHeaders = []Header{
+var DefaultHeaders = []FileHeader{
 	{
-		Ext:      "mp3",
+		Ext: "mp3",
+		Signatures: [][]byte{
+			{0xFF, 0xFA},
+			{0xFF, 0xFB},
+			{0xFF, 0xF2},
+			{0xFF, 0xF3},
+			{0xFF, 0xE2},
+			{0xFF, 0xE3},
+			[]byte("ID3"),
+		},
 		ScanFile: ScanMP3,
 	},
-
 	{
 		Ext:      "wav",
 		ScanFile: ScanWAV,
@@ -40,4 +48,12 @@ var DefaultHeaders = []Header{
 		Ext:      "zip",
 		ScanFile: ScanZIP,
 	},*/
+}
+
+func BuildRegistry() *FileRegistry {
+	r := NewFileRegisty()
+	for _, hdr := range DefaultHeaders {
+		r.Add(hdr)
+	}
+	return r
 }

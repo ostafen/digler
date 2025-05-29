@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ostafen/diglet/internal/disk"
-	"github.com/ostafen/diglet/internal/format"
+	"github.com/ostafen/digler/internal/disk"
+	"github.com/ostafen/digler/internal/format"
 )
 
 func Scan(filePath, dumpDir string) error {
@@ -48,7 +48,7 @@ func ScanPartition(p *disk.Partition, filePath, dumpDir string) error {
 
 	numFiles := 0
 
-	sc := format.NewScanner(uint64(p.BlockSize))
+	sc := format.NewScanner(int(p.BlockSize))
 
 	for finfo := range sc.Scan(r, p.Size) {
 		log.Printf("found %s file at block %d, size %d bytes\n", finfo.Format, finfo.Offset/uint64(p.BlockSize), finfo.Size)

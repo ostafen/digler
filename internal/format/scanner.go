@@ -2,14 +2,17 @@ package format
 
 import (
 	"bufio"
-	"fmt"
+	"bytes"
 	"io"
 	"math"
 )
 
 type Scanner struct {
-	headers   []Header
-	blockSize uint64
+	headers   []FileHeader
+	blockSize int
+
+	buf []byte
+	r   *FileRegistry
 }
 
 type FileInfo struct {
@@ -18,59 +21,86 @@ type FileInfo struct {
 	Format string // Format type (e.g., "MP3", "WAV")
 }
 
-func NewScanner(blockSize uint64) *Scanner {
+const DefaultBufferSize = 4 * 1024 * 1024
+
+func NewScanner(blockSize int) *Scanner {
 	return &Scanner{
 		headers:   DefaultHeaders,
 		blockSize: blockSize,
+		buf:       make([]byte, roundToMul(DefaultBufferSize, int(blockSize))),
+		r:         BuildRegistry(),
 	}
 }
 
-func (sc *Scanner) AddHeader(header Header) {
+func (sc *Scanner) AddHeader(header FileHeader) {
 	sc.headers = append(sc.headers, header)
 }
 
 func (sc *Scanner) Scan(r io.ReaderAt, limit uint64) func(yield func(FileInfo) bool) {
 	return func(yield func(FileInfo) bool) {
+
+		// TODO: create a multi reader
+
 		for blockOffset := uint64(0); blockOffset < limit; {
-			finfo, err := sc.scanFile(r, blockOffset)
-			if err == nil {
-				if !yield(finfo) {
-					return
+			n, err := r.ReadAt(sc.buf, int64(blockOffset))
+			if err != nil && err == io.EOF {
+				return
+			}
+			n = roundToMul(n, sc.blockSize) / sc.blockSize
+
+			sc.scanBuffer(n, func(blockIdx int, hdr FileHeader) uint64 {
+				fileReader := NewReader(
+					bufio.NewReader(
+						io.MultiReader(
+							bytes.NewReader(sc.buf[blockIdx*sc.blockSize:]),
+							io.NewSectionReader(
+								r,
+								int64(blockOffset)+int64(len(sc.buf)),
+								math.MaxInt64,
+							),
+						),
+					),
+				)
+
+				size, err := hdr.ScanFile(fileReader)
+				if err != nil {
+					return 0
 				}
 
-				blockOffset = nextBlockOffset(finfo.Offset+finfo.Size, uint64(sc.blockSize))
-			} else {
-				blockOffset += uint64(sc.blockSize)
+				finfo := FileInfo{
+					Offset: blockOffset + uint64(blockIdx)*uint64(sc.blockSize),
+					Size:   size,
+					Format: hdr.Ext,
+				}
+
+				yield(finfo)
+				return size
+			})
+			if err == io.EOF {
+				break
 			}
+			blockOffset += uint64(len(sc.buf))
 		}
 	}
 }
 
-func (sc *Scanner) scanFile(r io.ReaderAt, startOffset uint64) (FileInfo, error) {
-	for _, header := range sc.headers {
-		sr := NewReader(
-			bufio.NewReader(
-				io.NewSectionReader(
-					r,
-					int64(startOffset),
-					math.MaxInt64,
-				),
-			),
-		)
+func (sc *Scanner) scanBuffer(n int, onMatch func(blockIdx int, hdr FileHeader) uint64) {
+	// TODO: use an adaptive search strategy depending on
+	// how much matches you find in the blocks.
+	// If only 1 match is found, which is highly likely, then it doesn't
+	// make sense to cache older blocks in the chunk buffer as we will never roolback.
 
-		endOffset, err := header.ScanFile(sr)
-		if err == nil {
-			return FileInfo{
-				Offset: startOffset,
-				Size:   endOffset,
-				Format: header.Ext,
-			}, nil
+	// We assume each signature fits within a single block
+	for blockIdx := 0; blockIdx < n; {
+		size := sc.r.Search(sc.buf[blockIdx*sc.blockSize:], func(hdr FileHeader) uint64 {
+			return onMatch(blockIdx, hdr)
+		})
+
+		if size > 0 {
+			fileBlocks := roundToMul(int(size), sc.blockSize) / sc.blockSize
+			blockIdx += fileBlocks
+		} else {
+			blockIdx++
 		}
 	}
-	return FileInfo{}, fmt.Errorf("unable to scan file at offset %d", startOffset)
-}
-
-func nextBlockOffset(offset, blockSize uint64) uint64 {
-	block := (offset + blockSize - 1) / blockSize
-	return block * blockSize
 }
