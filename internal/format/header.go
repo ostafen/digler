@@ -21,33 +21,42 @@ var DefaultHeaders = []FileHeader{
 		ScanFile: ScanMP3,
 	},
 	{
-		Ext:      "wav",
+		Ext: "wav",
+		Signatures: [][]byte{
+			[]byte("RIFF"),
+			[]byte("RIFX"),
+		},
 		ScanFile: ScanWAV,
 	},
 	{
-		Ext:      "au",
+		Ext: "au",
+		Signatures: [][]byte{
+			{0x2E, 0x73, 0x6E, 0x64},
+		},
 		ScanFile: ScanSunAudio,
 	},
-	/*{
-		Ext:      "wma",
-		ScanFile: ScanWMA,
-	},*/
 	{
-		Ext:      "jpeg",
-		ScanFile: ScanJPEG,
+		Ext:        "wma",
+		Signatures: [][]byte{asfHeaderGUID},
+		ScanFile:   ScanWMA,
 	},
-	/*{
-		Ext:      "png",
-		ScanFile: ScanPNG,
-	},
-	{
-		Ext:      "gif",
-		ScanFile: ScanGIF,
-	},
-	{
-		Ext:      "zip",
-		ScanFile: ScanZIP,
-	},*/
+	/*
+		{
+			Ext:      "jpeg",
+			ScanFile: ScanJPEG,
+		},
+		{
+			Ext:      "png",
+			ScanFile: ScanPNG,
+		},
+		{
+			Ext:      "gif",
+			ScanFile: ScanGIF,
+		},
+		{
+			Ext:      "zip",
+			ScanFile: ScanZIP,
+		},*/
 }
 
 func BuildRegistry() *FileRegistry {

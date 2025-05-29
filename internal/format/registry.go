@@ -3,11 +3,12 @@ package format
 import (
 	"math"
 
+	"github.com/ostafen/digler/pkg/table"
 	art "github.com/plar/go-adaptive-radix-tree/v2"
 )
 
 type FileRegistry struct {
-	tree      art.Tree
+	table     *table.PrefixTable[headers]
 	minKeyLen int
 }
 
@@ -15,7 +16,7 @@ type headers []FileHeader
 
 func NewFileRegisty() *FileRegistry {
 	return &FileRegistry{
-		tree:      art.New(),
+		table:     table.New[headers](),
 		minKeyLen: math.MaxInt,
 	}
 }
@@ -23,9 +24,9 @@ func NewFileRegisty() *FileRegistry {
 func (r *FileRegistry) Add(hdr FileHeader) {
 	for _, sig := range hdr.Signatures {
 		key := art.Key(sig)
-		headers := r.get(key)
+		headers, _ := r.table.Get(sig)
 
-		r.tree.Insert(
+		r.table.Insert(
 			key,
 			append(headers, hdr),
 		)
@@ -38,36 +39,17 @@ func (r *FileRegistry) Add(hdr FileHeader) {
 // Searches the registry for headers where the key matches a prefix of `data`.
 // The search starts with `r.minKeyLen` and iteratively extends the key length
 // as long as matching headers are found. Each found header is processed by `handleHeader`.
-func (r *FileRegistry) Search(data []byte, handleHeader func(hdr FileHeader) uint64) uint64 {
-	if r.tree.Size() == 0 {
-		return 0
+func (r *FileRegistry) Search(data []byte, handleHeader func(hdr FileHeader) bool) {
+	if r.table.Size() == 0 {
+		return
 	}
 
-	keyLen := min(r.minKeyLen, len(data))
-	for {
-		// Performance Note: The current search complexity can be higher than ideal.
-		// For optimal performance, consider modifying the underlying tree implementation
-		// to support an incremental search mechanism, which would reduce the complexity
-		// to O(maxKeyLen) by avoiding repeated lookups for progressively longer keys.
-		headers := r.get(data[:keyLen])
-		for _, hdr := range headers {
-			if size := handleHeader(hdr); size > 0 {
-				return size
+	r.table.Walk(data, func(hdrs headers) bool {
+		for _, hdr := range hdrs {
+			if handleHeader(hdr) {
+				return true
 			}
 		}
-
-		if len(headers) == 0 {
-			break
-		}
-		keyLen = min(keyLen+1, len(data))
-	}
-	return 0
-}
-
-func (r *FileRegistry) get(sig []byte) headers {
-	value, found := r.tree.Search(art.Key(sig))
-	if !found {
-		return nil
-	}
-	return value.(headers)
+		return false
+	})
 }

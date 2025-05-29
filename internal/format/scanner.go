@@ -11,8 +11,9 @@ type Scanner struct {
 	headers   []FileHeader
 	blockSize int
 
-	buf []byte
-	r   *FileRegistry
+	currBlockOff int
+	buf          []byte
+	r            *FileRegistry
 }
 
 type FileInfo struct {
@@ -48,11 +49,13 @@ func (sc *Scanner) Scan(r io.ReaderAt, limit uint64) func(yield func(FileInfo) b
 			}
 			n = roundToMul(n, sc.blockSize) / sc.blockSize
 
+			sc.currBlockOff = int(blockOffset)
+
 			sc.scanBuffer(n, func(blockIdx int, hdr FileHeader) uint64 {
 				fileReader := NewReader(
 					bufio.NewReader(
 						io.MultiReader(
-							bytes.NewReader(sc.buf[blockIdx*sc.blockSize:]),
+							bytes.NewReader(sc.buf[blockIdx*sc.blockSize:n*sc.blockSize]),
 							io.NewSectionReader(
 								r,
 								int64(blockOffset)+int64(len(sc.buf)),
@@ -84,7 +87,7 @@ func (sc *Scanner) Scan(r io.ReaderAt, limit uint64) func(yield func(FileInfo) b
 	}
 }
 
-func (sc *Scanner) scanBuffer(n int, onMatch func(blockIdx int, hdr FileHeader) uint64) {
+func (sc *Scanner) scanBuffer(n int, scanFile func(blockIdx int, hdr FileHeader) uint64) {
 	// TODO: use an adaptive search strategy depending on
 	// how much matches you find in the blocks.
 	// If only 1 match is found, which is highly likely, then it doesn't
@@ -92,8 +95,11 @@ func (sc *Scanner) scanBuffer(n int, onMatch func(blockIdx int, hdr FileHeader) 
 
 	// We assume each signature fits within a single block
 	for blockIdx := 0; blockIdx < n; {
-		size := sc.r.Search(sc.buf[blockIdx*sc.blockSize:], func(hdr FileHeader) uint64 {
-			return onMatch(blockIdx, hdr)
+		var size uint64
+
+		sc.r.Search(sc.buf[blockIdx*sc.blockSize:], func(hdr FileHeader) bool {
+			size = scanFile(blockIdx, hdr)
+			return size > 0
 		})
 
 		if size > 0 {
