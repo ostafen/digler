@@ -1,7 +1,6 @@
 package format
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"hash"
@@ -134,8 +133,7 @@ func (d *decoder) verifyChecksum() error {
 	return nil
 }
 
-func ScanPNG(data []byte) (uint64, error) {
-	r := &countingReader{r: bytes.NewReader(data)}
+func ScanPNG(r *Reader) (uint64, error) {
 	d := &decoder{
 		r:   r,
 		crc: crc32.NewIEEE(),
@@ -156,5 +154,5 @@ func ScanPNG(data []byte) (uint64, error) {
 			return 0, err
 		}
 	}
-	return r.n, nil
+	return r.BytesRead(), nil
 }

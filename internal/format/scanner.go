@@ -26,10 +26,10 @@ const DefaultBufferSize = 4 * 1024 * 1024
 
 func NewScanner(blockSize int) *Scanner {
 	return &Scanner{
-		headers:   DefaultHeaders,
+		headers:   SupportedFileHeaders,
 		blockSize: blockSize,
 		buf:       make([]byte, roundToMul(DefaultBufferSize, int(blockSize))),
-		r:         BuildRegistry(),
+		r:         BuildFileRegistry(),
 	}
 }
 
@@ -109,4 +109,9 @@ func (sc *Scanner) scanBuffer(n int, scanFile func(blockIdx int, hdr FileHeader)
 			blockIdx++
 		}
 	}
+}
+
+func roundToMul(n, m int) int {
+	k := (n + m - 1) / m
+	return k * m
 }

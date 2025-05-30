@@ -5,23 +5,20 @@ import (
 	"io"
 )
 
-type reader interface {
-	io.Reader
-	io.ByteReader
-}
-
 type Reader struct {
-	r *bufio.Reader
+	buf *bufio.Reader
 
-	n int
+	n uint64
 }
 
 func NewReader(r *bufio.Reader) *Reader {
-	return &Reader{r: r}
+	return &Reader{
+		buf: r,
+	}
 }
 
 func (r *Reader) ReadByte() (byte, error) {
-	b, err := r.r.ReadByte()
+	b, err := r.buf.ReadByte()
 	if err == nil {
 		r.n++
 	}
@@ -29,26 +26,30 @@ func (r *Reader) ReadByte() (byte, error) {
 }
 
 func (r *Reader) Read(buf []byte) (int, error) {
-	n, err := r.r.Read(buf)
+	n, err := r.buf.Read(buf)
 	if err != nil && err != io.EOF {
 		return n, err
 	}
 
 	if n > 0 {
-		r.n += n
+		r.n += uint64(n)
 	}
 	return n, err
 }
 
 func (r *Reader) Discard(n int) (int, error) {
-	copied, err := io.CopyN(io.Discard, r.r, int64(n))
+	copied, err := io.CopyN(io.Discard, r, int64(n))
 	return int(copied), err
 }
 
 func (r *Reader) Peek(n int) ([]byte, error) {
-	return r.r.Peek(n)
+	return r.buf.Peek(n)
 }
 
-func (r *Reader) BytesRead() int {
+func (r *Reader) BytesRead() uint64 {
 	return r.n
+}
+
+func (r *Reader) BufferSize() int {
+	return r.buf.Size()
 }

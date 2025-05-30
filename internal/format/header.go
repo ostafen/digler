@@ -6,7 +6,7 @@ type FileHeader struct {
 	ScanFile   func(r *Reader) (uint64, error)
 }
 
-var DefaultHeaders = []FileHeader{
+var SupportedFileHeaders = []FileHeader{
 	{
 		Ext: "mp3",
 		Signatures: [][]byte{
@@ -36,32 +36,50 @@ var DefaultHeaders = []FileHeader{
 		ScanFile: ScanSunAudio,
 	},
 	{
-		Ext:        "wma",
-		Signatures: [][]byte{asfHeaderGUID},
-		ScanFile:   ScanWMA,
+		Ext: "wma",
+		Signatures: [][]byte{
+			asfHeaderGUID,
+		},
+		ScanFile: ScanWMA,
 	},
-	/*
-		{
-			Ext:      "jpeg",
-			ScanFile: ScanJPEG,
+	{
+		Ext: "jpeg",
+		Signatures: [][]byte{
+			{0xFF, 0xD8, 0xFF},
 		},
-		{
-			Ext:      "png",
-			ScanFile: ScanPNG,
+		ScanFile: ScanJPEG,
+	},
+	{
+		Ext:        "png",
+		Signatures: [][]byte{[]byte(pngHeader)},
+		ScanFile:   ScanPNG,
+	},
+	{
+		Ext: "gif",
+		Signatures: [][]byte{
+			[]byte("GIF87a"),
+			[]byte("GIF89a"),
 		},
-		{
-			Ext:      "gif",
-			ScanFile: ScanGIF,
+		ScanFile: ScanGIF,
+	},
+	{
+		Ext: "zip",
+		Signatures: [][]byte{
+			{'P', 'K', 0x03, 0x04},
+			{'P', 'K', '0', '0', 'P', 'K', 0x03, 0x04},
 		},
-		{
-			Ext:      "zip",
-			ScanFile: ScanZIP,
-		},*/
+		ScanFile: ScanZIP,
+	},
+	{
+		Ext:        "pdf",
+		Signatures: [][]byte{pdfHeader},
+		ScanFile:   ScanPDF,
+	},
 }
 
-func BuildRegistry() *FileRegistry {
+func BuildFileRegistry() *FileRegistry {
 	r := NewFileRegisty()
-	for _, hdr := range DefaultHeaders {
+	for _, hdr := range SupportedFileHeaders {
 		r.Add(hdr)
 	}
 	return r

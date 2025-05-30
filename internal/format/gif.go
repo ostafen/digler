@@ -1,7 +1,6 @@
 package format
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -42,9 +41,7 @@ type gifDecoder struct {
 	tmp [1024]byte // must be at least 768 so we can read color table
 }
 
-func ScanGIF(data []byte) (uint64, error) {
-	r := &countingReader{r: bytes.NewReader(data)}
-
+func ScanGIF(r *Reader) (uint64, error) {
 	d := gifDecoder{
 		loopCount: -1,
 		r:         r,

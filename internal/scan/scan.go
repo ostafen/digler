@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -46,17 +45,13 @@ func ScanPartition(p *disk.Partition, filePath, dumpDir string) error {
 		}
 	}
 
-	numFiles := 0
-
 	sc := format.NewScanner(int(p.BlockSize))
-
 	for finfo := range sc.Scan(r, p.Size) {
-		log.Printf("found %s file at block %d, size %d bytes\n", finfo.Format, finfo.Offset/uint64(p.BlockSize), finfo.Size)
+		block := finfo.Offset / uint64(p.BlockSize)
+		fmt.Printf("found %s file at block %d, size %d bytes\n", finfo.Format, block, finfo.Size)
 
 		if dumpDir != "" {
-			numFiles++
-
-			fileName := fmt.Sprintf("%d.%s", numFiles, finfo.Format)
+			fileName := fmt.Sprintf("f_%d.%s", block, finfo.Format)
 
 			fileReader := io.NewSectionReader(r, int64(finfo.Offset), int64(finfo.Size))
 			err := dumpFile(dumpDir, fileName, fileReader)

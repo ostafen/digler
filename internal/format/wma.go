@@ -103,18 +103,12 @@ func ScanWMA(r *Reader) (uint64, error) {
 	// 4. Iterate through the header's sub-objects
 	// `currentOffset` tracks the start of the current sub-object being parsed.
 
-	currentOffset := uint64(minASFHeaderObjSize) // Start after the initial ASF Header Object's fixed part
+	bytesRead := uint64(minASFHeaderObjSize) // Start after the initial ASF Header Object's fixed part
 
 	// Loop through `numHeaderObjects` or until we run out of valid buffer within the declared header.
 	for i := uint32(0); i < numHeaderObjects; i++ {
-		// Ensure there's enough buffer to read the next object's basic header (GUID + ObjectSize).
-
-		//if currentOffset+minGeneralSubObjectHeaderSize > bufLen {
-		//	break // Cannot read next object header, stop processing
-		//}
-
 		// Also ensure the current object doesn't spill past the main Header Object's declared boundary.
-		if currentOffset+minGeneralSubObjectHeaderSize > headerObjectSize {
+		if bytesRead+minGeneralSubObjectHeaderSize > headerObjectSize {
 			return 0, errors.New("malformed ASF header: sub-object extends beyond parent header")
 		}
 
@@ -141,26 +135,26 @@ func ScanWMA(r *Reader) (uint64, error) {
 		//}
 
 		// Also ensure it fits within the main Header Object's declared bounds.
-		if currentOffset+objSize > headerObjectSize {
+		if bytesRead+objSize > headerObjectSize {
 			return 0, errors.New("malformed ASF header: sub-object extends beyond header boundary")
 		}
 
 		// Check for specific ASF object types
 		if bytes.Equal(objID, asfFilePropGUID) {
-			buf, err := r.Peek(minFilePropObjSize)
-			if err != nil {
-				return 0, err
-			}
-
 			// Found the ASF File Properties Object
 			if objSize < minFilePropObjSize { // PhotoRec's C code check for min size 0x28 (40 bytes)
 				return 0, errors.New("invalid ASF File Properties Object size")
 			}
 
+			buf, err := r.Peek(minFilePropObjSize - minGeneralSubObjectHeaderSize)
+			if err != nil {
+				return 0, err
+			}
+
 			// The file_size field is at offset `filePropFileSizeOffset` within this object.
-			fileSizeFieldOffset := currentOffset + filePropFileSizeOffset
+			fileSizeFieldOffset := bytesRead + filePropFileSizeOffset
 			//fileSizeFieldOffset+8 > bufLen ||
-			if fileSizeFieldOffset+8 > currentOffset+objSize {
+			if fileSizeFieldOffset+8 > bytesRead+objSize {
 				return 0, errors.New("truncated ASF File Properties Object for 'file_size'")
 			}
 
@@ -172,7 +166,7 @@ func ScanWMA(r *Reader) (uint64, error) {
 				return 0, errors.New("invalid total file size in File Properties Object")
 			}
 		} else if bytes.Equal(objID, asfStreamPropGUID) {
-			buf, err := r.Peek(minStreamPropObjSize)
+			buf, err := r.Peek(minFilePropObjSize - minStreamPropObjSize)
 			if err != nil {
 				return 0, err
 			}
@@ -182,14 +176,13 @@ func ScanWMA(r *Reader) (uint64, error) {
 			}
 
 			// Check if this is a WMA stream type
-			streamTypeFieldOffset := currentOffset + streamPropStreamTypeOffset
+			streamTypeFieldOffset := bytesRead + streamPropStreamTypeOffset
 
 			//streamTypeFieldOffset+16 > bufLen
-			if streamTypeFieldOffset+16 > currentOffset+objSize {
+			if streamTypeFieldOffset+16 > bytesRead+objSize {
 				return 0, errors.New("truncated ASF Stream Properties Object for 'stream_type'")
 			}
 
-			fmt.Println("EHI")
 			streamType := buf[:16]
 			if bytes.Equal(streamType, streamTypeWMA) {
 				isWMAStreamFound = true
@@ -201,7 +194,7 @@ func ScanWMA(r *Reader) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
-		currentOffset += objSize // Move to the start of the next sub-object
+		bytesRead += objSize // Move to the start of the next sub-object
 	}
 
 	// 5. Final Validation and Return
@@ -214,13 +207,9 @@ func ScanWMA(r *Reader) (uint64, error) {
 
 	// PhotoRec's C code also had a check: `if(size > 0 && size < offset_prop) return 0;`
 	// This means the declared total file size must be at least as large as the combined size of all header objects parsed.
-	if totalFileSize < currentOffset {
-
+	if totalFileSize < bytesRead {
 		return 0, errors.New("inconsistent WMA file size: declared size is smaller than parsed header")
-
 	}
-
-	fmt.Println("HERE", totalFileSize, isWMAStreamFound)
 
 	// For a strict WMA file, we should confirm at least one WMA audio stream exists.
 	if !isWMAStreamFound {

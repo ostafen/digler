@@ -1,7 +1,6 @@
 package format
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 )
@@ -149,24 +148,4 @@ func ScanJPEG(r *Reader) (uint64, error) {
 			return 0, err
 		}
 	}
-}
-
-// CountingReader wraps an io.Reader and counts how many bytes have been read.
-type countingReader struct {
-	r *bytes.Reader
-	n uint64
-}
-
-func (cr *countingReader) Read(p []byte) (int, error) {
-	n, err := cr.r.Read(p)
-	cr.n += uint64(n)
-	return n, err
-}
-
-func (cr *countingReader) ReadByte() (byte, error) {
-	b, err := cr.r.ReadByte()
-	if err == nil {
-		cr.n++
-	}
-	return b, err
 }
