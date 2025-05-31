@@ -1,4 +1,4 @@
-name: Go Build Pipeline
+name: Build
 
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.22' # or whatever version you're using
+        go-version: '1.23'
 
     - name: Cache Go modules
       uses: actions/cache@v4
