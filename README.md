@@ -32,6 +32,15 @@ make build
 
 Precompiled binaries will be available for Linux, macOS, and Windows on the Releases page.
 
+### Supported File Types
+
+Digler allows for the recovery of lost or deleted files based on their unique headers and footers, even when file system metadata is corrupted or missing. Below is a list of all currently supported file formats:
+
+- **Documents**: docx, xlsx, pdf
+- **Images**: jpg, png, gif, bmp, tiff, raw
+- **Audio**: mp3, wav, flac
+- **Archives**: zip
+
 ### License
 
 Digler is released under the **MIT License**.
