@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"log/slog"
 	"math"
+
+	"github.com/ostafen/digler/pkg/pbar"
 )
 
 type Scanner struct {
@@ -14,6 +17,7 @@ type Scanner struct {
 	currBlockOff int
 	buf          []byte
 	r            *FileRegistry
+	logger       *slog.Logger
 }
 
 type FileInfo struct {
@@ -22,14 +26,13 @@ type FileInfo struct {
 	Format string // Format type (e.g., "MP3", "WAV")
 }
 
-const DefaultBufferSize = 4 * 1024 * 1024
-
-func NewScanner(blockSize int) *Scanner {
+func NewScanner(logger *slog.Logger, r *FileRegistry, bufferSize, blockSize int) *Scanner {
 	return &Scanner{
-		headers:   SupportedFileHeaders,
+		headers:   fileHeaders,
 		blockSize: blockSize,
-		buf:       make([]byte, roundToMul(DefaultBufferSize, int(blockSize))),
-		r:         BuildFileRegistry(),
+		buf:       make([]byte, roundToMul(bufferSize, int(blockSize))),
+		r:         r,
+		logger:    logger,
 	}
 }
 
@@ -37,21 +40,31 @@ func (sc *Scanner) AddHeader(header FileHeader) {
 	sc.headers = append(sc.headers, header)
 }
 
-func (sc *Scanner) Scan(r io.ReaderAt, limit uint64) func(yield func(FileInfo) bool) {
+func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bool) {
 	return func(yield func(FileInfo) bool) {
+		stop := false
 
-		// TODO: create a multi reader
+		pb := pbar.NewProgressBarState(int64(size))
 
-		for blockOffset := uint64(0); blockOffset < limit; {
+		filesFound := 0
+
+		for blockOffset := uint64(0); !stop && blockOffset < size; {
 			n, err := r.ReadAt(sc.buf, int64(blockOffset))
 			if err != nil && err != io.EOF {
 				return
 			}
+
 			n = roundToMul(n, sc.blockSize) / sc.blockSize
 
 			sc.currBlockOff = int(blockOffset)
 
 			sc.scanBuffer(n, func(blockIdx int, hdr FileHeader) uint64 {
+				globalOffset := blockOffset + uint64(blockIdx)*uint64(sc.blockSize)
+
+				pb.ProcessedBytes = int64(globalOffset)
+				pb.FilesFound = filesFound
+				pb.Render(false)
+
 				fileReader := NewReader(
 					bufio.NewReader(
 						io.MultiReader(
@@ -71,12 +84,14 @@ func (sc *Scanner) Scan(r io.ReaderAt, limit uint64) func(yield func(FileInfo) b
 				}
 
 				finfo := FileInfo{
-					Offset: blockOffset + uint64(blockIdx)*uint64(sc.blockSize),
+					Offset: globalOffset,
 					Size:   size,
 					Format: hdr.Ext,
 				}
 
-				yield(finfo)
+				stop = !yield(finfo)
+
+				filesFound++
 				return size
 			})
 			if err == io.EOF {
@@ -84,16 +99,14 @@ func (sc *Scanner) Scan(r io.ReaderAt, limit uint64) func(yield func(FileInfo) b
 			}
 			blockOffset += uint64(len(sc.buf))
 		}
+
+		pb.ProcessedBytes = int64(size)
+		pb.FilesFound = filesFound
+		pb.Render(true)
 	}
 }
 
 func (sc *Scanner) scanBuffer(n int, scanFile func(blockIdx int, hdr FileHeader) uint64) {
-	// TODO: use an adaptive search strategy depending on
-	// how much matches you find in the blocks.
-	// If only 1 match is found, which is highly likely, then it doesn't
-	// make sense to cache older blocks in the chunk buffer as we will never roolback.
-
-	// We assume each signature fits within a single block
 	for blockIdx := 0; blockIdx < n; {
 		var size uint64
 

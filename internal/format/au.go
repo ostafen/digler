@@ -6,6 +6,14 @@ import (
 	"io"
 )
 
+var sunAudioFileHeader = FileHeader{
+	Ext: "au",
+	Signatures: [][]byte{
+		{0x2E, 0x73, 0x6E, 0x64},
+	},
+	ScanFile: ScanSunAudio,
+}
+
 const (
 	// AU_MAGIC is the magic number for .au files: ".snd" in big-endian.
 	AU_MAGIC uint32 = 0x2e736e64

@@ -9,6 +9,15 @@ import (
 	"unsafe"
 )
 
+var zipFileHeader = FileHeader{
+	Ext: "zip",
+	Signatures: [][]byte{
+		{'P', 'K', 0x03, 0x04},
+		{'P', 'K', '0', '0', 'P', 'K', 0x03, 0x04},
+	},
+	ScanFile: ScanZIP,
+}
+
 var ErrInvalidZip = errors.New("invalid zip file")
 
 const (

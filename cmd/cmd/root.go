@@ -8,8 +8,7 @@ const AppName = "diglet"
 
 func Execute() error {
 	rootCmd := &cobra.Command{
-		Use:   AppName,
-		Short: AppName + " - disk analysis and recovery tool",
+		Use: AppName,
 	}
 
 	rootCmd.AddCommand(DefineScanCommand())

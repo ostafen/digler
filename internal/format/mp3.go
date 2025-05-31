@@ -7,6 +7,20 @@ import (
 	"io"
 )
 
+var mp3FileHeader = FileHeader{
+	Ext: "mp3",
+	Signatures: [][]byte{
+		{0xFF, 0xFA},
+		{0xFF, 0xFB},
+		{0xFF, 0xF2},
+		{0xFF, 0xF3},
+		{0xFF, 0xE2},
+		{0xFF, 0xE3},
+		[]byte("ID3"),
+	},
+	ScanFile: ScanMP3,
+}
+
 // mp3Header represents the parsed information from a 4-byte MP3 frame header.
 type mp3Header struct {
 	MPEGVersion int  // 1, 2, or 2.5
@@ -16,6 +30,16 @@ type mp3Header struct {
 	Padding     bool // True if padding bit is set
 	FrameSize   int  // calculated size of the entire frame in bytes
 }
+
+const (
+	// MP3 frame size bounds (in bytes) used to validate potential MP3 frames during carving.
+	// These bounds are based on MPEG-1 Layer III specifications:
+	// - Minimum valid frame size ≈ 96 bytes (e.g., 32 kbps @ 48 kHz)
+	// - Maximum valid frame size ≈ 1440 bytes (e.g., 320 kbps @ 32 kHz)
+	// Frames outside this range are considered invalid to avoid false positives.
+	minMp3FrameSize = 100
+	maxMp3FrameSize = 1500
+)
 
 // --- Global Lookup Tables for MP3 Header Parsing ---
 // These tables are derived from the MPEG Audio specification.
@@ -175,7 +199,7 @@ func parseMP3Header(headerBytes []byte) (mp3Header, bool) {
 func ScanMP3(r *Reader) (uint64, error) {
 	var n int // Tracks the current position in the buffer
 
-	// 1. Check for and skip an initial ID3v2 tag (if present)
+	// Check for and skip an initial ID3v2 tag (if present)
 	// This is the only non-audio content allowed at the very start of the stream.
 	skippedBytes, err := skipID3v2Tag(r)
 	if err != nil {
@@ -186,7 +210,6 @@ func ScanMP3(r *Reader) (uint64, error) {
 	var headerBytes [4]byte
 	numFrames := 0
 
-	// 3. Continue parsing contiguous MP3 frames
 	// currentOffset now points to the start of the first valid MP3 frame.
 	// We will advance currentOffset frame by frame to find the end of the stream.
 	for {
@@ -206,6 +229,10 @@ func ScanMP3(r *Reader) (uint64, error) {
 			break
 		}
 
+		if header.FrameSize < minMp3FrameSize || header.FrameSize > maxMp3FrameSize {
+			return 0, fmt.Errorf("invalid mp3 frame size")
+		}
+
 		if _, err := r.Discard(header.FrameSize - 4); err != nil {
 			return 0, err
 		}
@@ -214,7 +241,6 @@ func ScanMP3(r *Reader) (uint64, error) {
 		numFrames++
 	}
 
-	// 4. Final Validation and Return
 	// A stream with only 1 frame is highly suspicious and often a false positive.
 	// Requiring at least 2 frames provides more confidence.
 	const MinimumRequiredFrames = 2

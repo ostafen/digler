@@ -37,6 +37,7 @@ func (r *Reader) Read(buf []byte) (int, error) {
 	return n, err
 }
 
+// TODO: this method is inefficient. Underlying reader must support Seek()
 func (r *Reader) Discard(n int) (int, error) {
 	copied, err := io.CopyN(io.Discard, r, int64(n))
 	return int(copied), err

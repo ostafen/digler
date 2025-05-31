@@ -7,6 +7,14 @@ import (
 	"fmt"
 )
 
+var wmaFileHeader = FileHeader{
+	Ext: "wma",
+	Signatures: [][]byte{
+		asfHeaderGUID,
+	},
+	ScanFile: ScanWMA,
+}
+
 // GUIDs for ASF objects (WMA/WMV are built on ASF)
 // All values are Little Endian as they appear in the file.
 var (

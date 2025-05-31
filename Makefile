@@ -2,6 +2,9 @@ BINARY_NAME = digler
 MAIN_FILE = cmd/main.go
 OUTPUT_DIR = bin
 
+# Target platforms: os/arch
+TARGETS = linux/amd64 linux/arm64 darwin/amd64 windows/amd64
+
 # Get the latest tag (if any)
 TAG := $(shell git describe --tags --exact-match 2>/dev/null || echo "")
 
@@ -31,7 +34,13 @@ all: build
 build:
 	@mkdir -p $(OUTPUT_DIR)
 	@echo "Building $(BINARY_NAME) version: $(VERSION)"
-	go build -ldflags "-X main.Version=$(VERSION) -X main.CommitHash=$(COMMIT_HASH) -X main.BuildTime=$(BUILD_TIME)" -o $(OUTPUT_DIR)/$(BINARY_NAME) $(MAIN_FILE)
+	@for target in $(TARGETS); do \
+		GOOS=$${target%%/*} && GOARCH=$${target##*/}; \
+		output_name="$(BINARY_NAME)-$${GOOS}-$${GOARCH}"; \
+		if [ "$${GOOS}" = "windows" ]; then output_name="$$output_name.exe"; fi; \
+		echo "-> $$output_name"; \
+		GOOS=$$GOOS GOARCH=$$GOARCH go build -ldflags "-X main.Version=$(VERSION) -X main.CommitHash=$(COMMIT_HASH) -X main.BuildTime=$(BUILD_TIME)" -o $(OUTPUT_DIR)/$$output_name $(MAIN_FILE); \
+	done
 
 clean:
 	rm -rf $(OUTPUT_DIR)

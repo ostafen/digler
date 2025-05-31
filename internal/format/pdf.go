@@ -5,6 +5,12 @@ import (
 	"fmt"
 )
 
+var pdfFileHeader = FileHeader{
+	Ext:        "pdf",
+	Signatures: [][]byte{pdfHeader},
+	ScanFile:   ScanPDF,
+}
+
 var (
 	pdfHeader = []byte("%PDF-")
 	eofMarker = []byte("%%EOF")

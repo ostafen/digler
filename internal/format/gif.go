@@ -6,6 +6,15 @@ import (
 	"io"
 )
 
+var gifFileHeader = FileHeader{
+	Ext: "gif",
+	Signatures: [][]byte{
+		[]byte("GIF87a"),
+		[]byte("GIF89a"),
+	},
+	ScanFile: ScanGIF,
+}
+
 // Section indicators.
 const (
 	sExtension       = 0x21

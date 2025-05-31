@@ -5,6 +5,14 @@ import (
 	"io"
 )
 
+var jpegFileHeader = FileHeader{
+	Ext: "jpeg",
+	Signatures: [][]byte{
+		{0xFF, 0xD8, 0xFF},
+	},
+	ScanFile: ScanJPEG,
+}
+
 const (
 	sof0Marker = 0xc0 // Start Of Frame (Baseline Sequential).
 	sof1Marker = 0xc1 // Start Of Frame (Extended Sequential).

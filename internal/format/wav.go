@@ -6,6 +6,15 @@ import (
 	"io"
 )
 
+var wavFileHeader = FileHeader{
+	Ext: "wav",
+	Signatures: [][]byte{
+		[]byte("RIFF"),
+		[]byte("RIFX"),
+	},
+	ScanFile: ScanWAV,
+}
+
 // The size of a standard 16-byte WAV 'fmt ' sub-chunk.
 // This is typical for PCM audio.
 const (

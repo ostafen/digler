@@ -108,8 +108,8 @@ func (t *PrefixTable[T]) Walk(key []byte, onMatch func(T) bool) {
 			// If `elemMarker`, this prefix itself is a complete key in the table.
 			// Retrieve the value associated with this prefix and call the callback.
 			// Note: string(key[:i+1]) creates a new string for the prefix.
-			v := t.elems[string(key[:i+1])]
-			if onMatch(v) {
+			v, ok := t.elems[string(key[:i+1])]
+			if ok && onMatch(v) {
 				return
 			}
 		}
