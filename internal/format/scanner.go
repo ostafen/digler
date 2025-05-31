@@ -1,10 +1,23 @@
 package format
 
-import "fmt"
+import (
+	"bufio"
+	"bytes"
+	"io"
+	"log/slog"
+	"math"
+
+	"github.com/ostafen/digler/pkg/pbar"
+)
 
 type Scanner struct {
-	headers   []Header
-	blockSize uint64
+	headers   []FileHeader
+	blockSize int
+
+	currBlockOff int
+	buf          []byte
+	r            *FileRegistry
+	logger       *slog.Logger
 }
 
 type FileInfo struct {
@@ -13,49 +26,105 @@ type FileInfo struct {
 	Format string // Format type (e.g., "MP3", "WAV")
 }
 
-func NewScanner(blockSize uint64) *Scanner {
+func NewScanner(logger *slog.Logger, r *FileRegistry, bufferSize, blockSize int) *Scanner {
 	return &Scanner{
-		headers:   DefaultHeaders,
+		headers:   fileHeaders,
 		blockSize: blockSize,
+		buf:       make([]byte, roundToMul(bufferSize, int(blockSize))),
+		r:         r,
+		logger:    logger,
 	}
 }
 
-func (sc *Scanner) AddHeader(header Header) {
+func (sc *Scanner) AddHeader(header FileHeader) {
 	sc.headers = append(sc.headers, header)
 }
 
-func (sc *Scanner) Scan(data []byte) func(yield func(FileInfo) bool) {
+func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bool) {
 	return func(yield func(FileInfo) bool) {
-		for blockOffset := uint64(0); blockOffset < uint64(len(data)); {
-			finfo, err := sc.scanFile(data, blockOffset)
-			if err == nil {
-				if !yield(finfo) {
-					return
+		stop := false
+
+		pb := pbar.NewProgressBarState(int64(size))
+
+		filesFound := 0
+
+		for blockOffset := uint64(0); !stop && blockOffset < size; {
+			n, err := r.ReadAt(sc.buf, int64(blockOffset))
+			if err != nil && err != io.EOF {
+				return
+			}
+
+			n = roundToMul(n, sc.blockSize) / sc.blockSize
+
+			sc.currBlockOff = int(blockOffset)
+
+			sc.scanBuffer(n, func(blockIdx int, hdr FileHeader) uint64 {
+				globalOffset := blockOffset + uint64(blockIdx)*uint64(sc.blockSize)
+
+				pb.ProcessedBytes = int64(globalOffset)
+				pb.FilesFound = filesFound
+				pb.Render(false)
+
+				fileReader := NewReader(
+					bufio.NewReader(
+						io.MultiReader(
+							bytes.NewReader(sc.buf[blockIdx*sc.blockSize:n*sc.blockSize]),
+							io.NewSectionReader(
+								r,
+								int64(blockOffset)+int64(len(sc.buf)),
+								math.MaxInt64,
+							),
+						),
+					),
+				)
+
+				size, err := hdr.ScanFile(fileReader)
+				if err != nil {
+					return 0
 				}
 
-				blockOffset = nextBlockOffset(finfo.Offset+finfo.Size, uint64(sc.blockSize))
-			} else {
-				blockOffset += uint64(sc.blockSize)
+				finfo := FileInfo{
+					Offset: globalOffset,
+					Size:   size,
+					Format: hdr.Ext,
+				}
+
+				stop = !yield(finfo)
+
+				filesFound++
+				return size
+			})
+			if err == io.EOF {
+				break
 			}
+			blockOffset += uint64(len(sc.buf))
+		}
+
+		pb.ProcessedBytes = int64(size)
+		pb.FilesFound = filesFound
+		pb.Render(true)
+	}
+}
+
+func (sc *Scanner) scanBuffer(n int, scanFile func(blockIdx int, hdr FileHeader) uint64) {
+	for blockIdx := 0; blockIdx < n; {
+		var size uint64
+
+		sc.r.Search(sc.buf[blockIdx*sc.blockSize:], func(hdr FileHeader) bool {
+			size = scanFile(blockIdx, hdr)
+			return size > 0
+		})
+
+		if size > 0 {
+			fileBlocks := roundToMul(int(size), sc.blockSize) / sc.blockSize
+			blockIdx += fileBlocks
+		} else {
+			blockIdx++
 		}
 	}
 }
 
-func (sc *Scanner) scanFile(data []byte, startOffset uint64) (FileInfo, error) {
-	for _, header := range sc.headers {
-		endOffset, err := header.ScanFile(data[startOffset:])
-		if err == nil {
-			return FileInfo{
-				Offset: startOffset,
-				Size:   endOffset,
-				Format: header.Ext,
-			}, nil
-		}
-	}
-	return FileInfo{}, fmt.Errorf("unable to scan file at offset %d", startOffset)
-}
-
-func nextBlockOffset(offset, blockSize uint64) uint64 {
-	block := (offset + blockSize - 1) / blockSize
-	return block * blockSize
+func roundToMul(n, m int) int {
+	k := (n + m - 1) / m
+	return k * m
 }

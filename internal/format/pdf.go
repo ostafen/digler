@@ -2,49 +2,75 @@ package format
 
 import (
 	"bytes"
-	"errors"
-	"strconv"
+	"fmt"
 )
 
-func ScanPDF(buf []byte) (uint64, error) {
-	if len(buf) < 8 || !bytes.HasPrefix(buf, []byte("%PDF-1.")) {
-		return 0, errors.New("not a valid PDF")
+var pdfFileHeader = FileHeader{
+	Ext:        "pdf",
+	Signatures: [][]byte{pdfHeader},
+	ScanFile:   ScanPDF,
+}
+
+var (
+	pdfHeader = []byte("%PDF-")
+	eofMarker = []byte("%%EOF")
+
+	pdfMaxFileSize = 16 * 1024 * 1024 // 16MB
+)
+
+// ScanPDF reads a byte stream from an io.Reader, identifies a potential PDF file,
+// and returns its carved size.
+//
+// This function assumes that the entire potential PDF segment can be read into
+// memory. For extremely large files (gigabytes), a more advanced streaming
+// parser with limited look-behind would be necessary.
+//
+// It searches for the first occurrence of the standard PDF header (%PDF-X.Y)
+// and the last occurrence of the end-of-file marker (%%EOF). The carved size
+// is determined by the position of the last %%EOF marker plus its length.
+//
+// Parameters:
+//
+//	r io.Reader: The input stream from which to read the PDF data.
+//
+// Returns:
+//
+//	uint64: The size of the carved PDF file in bytes.
+//	error: An error if the PDF header or EOF marker is not found, or if the
+//	       EOF marker appears before the header.
+func ScanPDF(r *Reader) (uint64, error) {
+	var headerBuf [5]byte
+	_, err := r.Read(headerBuf[:])
+	if err != nil {
+		return 0, err
 	}
 
-	// 1. Look for "/Linearized" then "/L <size>"
-	linearizedIndex := bytes.Index(buf, []byte("/Linearized"))
-	if linearizedIndex != -1 {
-		// Limit scan to 512 bytes after /Linearized
-		end := linearizedIndex + 512
-		if end > len(buf) {
-			end = len(buf)
+	if !bytes.Equal(headerBuf[:], pdfHeader) {
+		return 0, fmt.Errorf("invalid pdf file")
+	}
+
+	var size uint64
+	for {
+		n := r.BytesRead()
+
+		seeked, err := SeekAt(r, eofMarker, pdfMaxFileSize)
+		if err != nil {
+			return 0, err
 		}
-		segment := buf[linearizedIndex:end]
-
-		// Look for "/L "
-		for i := 0; i < len(segment)-3; i++ {
-			if segment[i] == '/' && segment[i+1] == 'L' && segment[i+2] == ' ' {
-				// Parse number after "/L "
-				j := i + 3
-				for j < len(segment) && segment[j] == ' ' {
-					j++
-				}
-				start := j
-				for j < len(segment) && segment[j] >= '0' && segment[j] <= '9' {
-					j++
-				}
-				numStr := string(segment[start:j])
-				if size, err := strconv.ParseUint(numStr, 10, 64); err == nil {
-					return size, nil
-				}
-			}
+		if !seeked {
+			break
 		}
+
+		_, err = r.Discard(len(eofMarker))
+		if err != nil {
+			return 0, err
+		}
+
+		size = r.BytesRead() - n + uint64(len(eofMarker))
 	}
 
-	// 2. Fallback: Look for last %EOF
-	lastEOF := bytes.LastIndex(buf, []byte("%EOF"))
-	if lastEOF != -1 {
-		return uint64(lastEOF + len("%EOF")), nil
+	if size == 0 {
+		return 0, fmt.Errorf("invalid pdf file")
 	}
-	return 0, errors.New("could not determine PDF size")
+	return size, nil
 }

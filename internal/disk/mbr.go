@@ -145,6 +145,7 @@ const (
 	PartitionTypeLinuxFilesystem
 	PartitionTypeGPTProtectiveMBR
 	PartitionTypeEFISystemPartition
+	PartitionTypeGPT = 0xEE
 )
 
 // Helper function to map common partition type IDs to names

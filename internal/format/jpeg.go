@@ -1,10 +1,17 @@
 package format
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 )
+
+var jpegFileHeader = FileHeader{
+	Ext: "jpeg",
+	Signatures: [][]byte{
+		{0xFF, 0xD8, 0xFF},
+	},
+	ScanFile: ScanJPEG,
+}
 
 const (
 	sof0Marker = 0xc0 // Start Of Frame (Baseline Sequential).
@@ -49,15 +56,18 @@ func discard(n int, r io.Reader) error {
 // It returns the total size of the JPEG file (the offset of the EOI marker
 // plus its 2-byte length) or the buffer's length if the file appears truncated.
 // It returns an error if the file is malformed or doesn't start with an SOI marker.
-func ScanJPEG(data []byte) (uint64, error) {
+func ScanJPEG(r *Reader) (uint64, error) {
 	// Check for the Start Of Image marker.
-	if data[0] != 0xff || data[1] != soiMarker {
-		return 0, fmt.Errorf("missing SOI marker")
-	}
-
 	var tmp [2]byte
 
-	r := &countingReader{r: bytes.NewReader(data[2:]), n: 2}
+	_, err := r.Read(tmp[:])
+	if err != nil {
+		return 0, err
+	}
+
+	if tmp[0] != 0xff || tmp[1] != soiMarker {
+		return 0, fmt.Errorf("missing SOI marker")
+	}
 
 	// Process the remaining segments until the End Of Image marker.
 	for {
@@ -106,7 +116,7 @@ func ScanJPEG(data []byte) (uint64, error) {
 			}
 		}
 		if marker == eoiMarker { // End Of Image.
-			return r.n, nil
+			return uint64(r.BytesRead()), nil
 		}
 		if rst0Marker <= marker && marker <= rst7Marker {
 			// Figures B.2 and B.16 of the specification suggest that restart markers should
@@ -146,24 +156,4 @@ func ScanJPEG(data []byte) (uint64, error) {
 			return 0, err
 		}
 	}
-}
-
-// CountingReader wraps an io.Reader and counts how many bytes have been read.
-type countingReader struct {
-	r *bytes.Reader
-	n uint64
-}
-
-func (cr *countingReader) Read(p []byte) (int, error) {
-	n, err := cr.r.Read(p)
-	cr.n += uint64(n)
-	return n, err
-}
-
-func (cr *countingReader) ReadByte() (byte, error) {
-	b, err := cr.r.ReadByte()
-	if err == nil {
-		cr.n++
-	}
-	return b, err
 }

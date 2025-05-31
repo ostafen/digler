@@ -1,11 +1,19 @@
 package format
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
 )
+
+var gifFileHeader = FileHeader{
+	Ext: "gif",
+	Signatures: [][]byte{
+		[]byte("GIF87a"),
+		[]byte("GIF89a"),
+	},
+	ScanFile: ScanGIF,
+}
 
 // Section indicators.
 const (
@@ -42,9 +50,7 @@ type gifDecoder struct {
 	tmp [1024]byte // must be at least 768 so we can read color table
 }
 
-func ScanGIF(data []byte) (uint64, error) {
-	r := &countingReader{r: bytes.NewReader(data)}
-
+func ScanGIF(r *Reader) (uint64, error) {
 	d := gifDecoder{
 		loopCount: -1,
 		r:         r,
