@@ -2,6 +2,9 @@ BINARY_NAME = digler
 MAIN_FILE = cmd/main.go
 OUTPUT_DIR = bin
 
+MODULE := $(shell go list -m)
+ENV_PKG = $(MODULE)/internal/env
+
 # Target platforms: os/arch
 TARGETS = linux/amd64 linux/arm64 darwin/amd64 windows/amd64
 
@@ -39,7 +42,7 @@ build:
 		output_name="$(BINARY_NAME)-$${GOOS}-$${GOARCH}"; \
 		if [ "$${GOOS}" = "windows" ]; then output_name="$$output_name.exe"; fi; \
 		echo "-> $$output_name"; \
-		GOOS=$$GOOS GOARCH=$$GOARCH go build -ldflags "-X main.Version=$(VERSION) -X main.CommitHash=$(COMMIT_HASH) -X main.BuildTime=$(BUILD_TIME)" -o $(OUTPUT_DIR)/$$output_name $(MAIN_FILE); \
+		GOOS=$$GOOS GOARCH=$$GOARCH go build -ldflags "-X $(ENV_PKG).Version=$(VERSION) -X $(ENV_PKG).CommitHash=$(COMMIT_HASH) -X $(ENV_PKG).BuildTime=$(BUILD_TIME)" -o $(OUTPUT_DIR)/$$output_name $(MAIN_FILE); \
 	done
 
 clean:

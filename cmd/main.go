@@ -4,12 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ostafen/digler/cmd/cmd"
-)
-
-var (
-	Version    = "dev" // Default to "dev" if not set by build flags
-	CommitHash = "none"
-	BuildTime  = "unknown"
+	"github.com/ostafen/digler/internal/env"
 )
 
 func main() {
@@ -28,8 +23,8 @@ func PrintLogo() {
 	fmt.Println()
 	fmt.Println("Disk analysis and recovery tool")
 	fmt.Println()
-	fmt.Printf("Version:   %s\n", Version)
-	fmt.Printf("Commit:    %s\n", CommitHash)
-	fmt.Printf("Build Time: %s\n", BuildTime)
+	fmt.Printf("Version:   %s\n", env.Version)
+	fmt.Printf("Commit:    %s\n", env.CommitHash)
+	fmt.Printf("Build Time: %s\n", env.BuildTime)
 	fmt.Println(" ")
 }
