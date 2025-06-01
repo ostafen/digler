@@ -9,6 +9,8 @@
 
 * **File System Agnostic Analysis**: Recover deleted files regardless of the underlying file system (e.g., NTFS, FAT32, ext4), even when metadata is lost.
 
+* **Post-Scan Data Recovery**: Utilize the generated DFXML reports to precisely recover deleted or fragmented files.
+
 * **Intuitive Command-Line Interface**:  A user-friendly CLI designed for efficiency and ease of use.
 
 * **Reporting Capabilities**: Generate detailed reports, compliant with the `Digital Forensics XML (DFXML)` format, of recovered data and analysis findings.
