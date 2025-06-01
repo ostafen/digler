@@ -12,6 +12,7 @@ func Execute() error {
 	}
 
 	rootCmd.AddCommand(DefineScanCommand())
+	rootCmd.AddCommand(DefineMountCommand())
 
 	return rootCmd.Execute()
 }

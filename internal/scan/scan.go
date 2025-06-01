@@ -12,15 +12,19 @@ import (
 	"time"
 
 	"github.com/ostafen/digler/internal/disk"
+	"github.com/ostafen/digler/internal/env"
 	"github.com/ostafen/digler/internal/format"
 	"github.com/ostafen/digler/internal/fs"
+	"github.com/ostafen/digler/pkg/dfxml"
 	fmtutil "github.com/ostafen/digler/pkg/util/format"
 )
 
 type Options struct {
 	DumpDir        string
+	ReportFile     string
 	MaxScanSize    uint64
 	ScanBufferSize uint64
+	BlockSize      uint64
 	DisableLog     bool
 	LogLevel       slog.Level
 }
@@ -59,7 +63,44 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 	}
 	defer f.Close()
 
-	session := GenerateSessionName()
+	imgInfo, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	session := GenSessionID()
+
+	var reportFileName string
+	if opts.ReportFile == "" {
+		reportFileName = fmt.Sprintf("report_%s.xml", session)
+	}
+
+	outFile, err := os.Create(reportFileName)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	reportFileWriter := dfxml.NewDFXMLWriter(outFile)
+	defer reportFileWriter.Close()
+
+	err = reportFileWriter.WriteHeader(dfxml.DFXMLHeader{
+		XmlOutput: dfxml.XmlOutputVersion,
+		Metadata:  dfxml.DefaultMetadata,
+		Creator: dfxml.Creator{
+			Package:              env.AppName,
+			Version:              env.Version,
+			ExecutionEnvironment: dfxml.GetExecEnv(),
+		},
+		Source: dfxml.Source{
+			ImageFilename: filePath,
+			SectorSize:    int(p.BlockSize),
+			ImageSize:     uint64(imgInfo.Size()),
+		},
+	})
+	if err != nil {
+		return err
+	}
 
 	var logFilePath string
 	if !opts.DisableLog {
@@ -109,16 +150,28 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		filesFound++
 		totalDataSize += finfo.Size
 
-		block := finfo.Offset / uint64(p.BlockSize)
-
+		fileName := fmt.Sprintf("f_%d.%s", finfo.Offset/uint64(p.BlockSize), finfo.Format)
 		if opts.DumpDir != "" {
-			fileName := fmt.Sprintf("f_%d.%s", block, finfo.Format)
-
 			fileReader := io.NewSectionReader(r, int64(finfo.Offset), int64(finfo.Size))
 			err := dumpFile(opts.DumpDir, fileName, fileReader)
 			if err != nil {
 				return err
 			}
+		}
+
+		err := reportFileWriter.WriteFileObject(dfxml.FileObject{
+			Filename: fileName,
+			FileSize: uint64(finfo.Size),
+			ByteRuns: dfxml.ByteRuns{
+				Runs: []dfxml.ByteRun{{
+					Offset:    uint64(finfo.Offset),
+					ImgOffset: uint64(finfo.Offset),
+					Length:    uint64(finfo.Size),
+				}},
+			},
+		})
+		if err != nil {
+			logger.Error("unable to write index entry", "err", err)
 		}
 	}
 
@@ -128,10 +181,7 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 	fmt.Printf("[INFO] Files found: \t%d\n", filesFound)
 	fmt.Printf("[INFO] Total data: \t%s\n", fmtutil.FormatBytes(int64(size)))
 	fmt.Printf("[INFO] Duration: \t%s\n", FormatDurationHMS(time.Since(start)))
-
-	if opts.DumpDir != "" {
-		fmt.Printf("[INFO] Result saved to: \t%s\n", absPath(opts.DumpDir))
-	}
+	fmt.Printf("[INFO] Report saved to: \t%s\n", absPath(reportFileName))
 
 	if !opts.DisableLog {
 		fmt.Printf("[INFO] Detailed scan log: \t%s\n", logFilePath)
@@ -253,9 +303,9 @@ func GetMBRPartitions(imgFile fs.File, mbr *disk.MBR) ([]disk.Partition, error) 
 	return partitions, nil
 }
 
-// GenerateSessionName creates a unique file name for a scan session.
+// GenSessionID creates a unique file name for a scan session.
 // The format is "scan_YYYYMMDD_HHMMSS".
-func GenerateSessionName() string {
+func GenSessionID() string {
 	now := time.Now()
 
 	// Format the time as YYYYMMDD_HHMMSS
@@ -265,8 +315,7 @@ func GenerateSessionName() string {
 	// HH   = hour (24-hour format, e.g., 16)
 	// MM   = minute (e.g., 03)
 	// SS   = second (e.g., 20)
-	timestamp := now.Format("20060102_150405") // Go's special reference time format
-	return fmt.Sprintf("scan_%s", timestamp)
+	return now.Format("20060102_150405") // Go's special reference time format
 }
 
 // FormatDurationHMS formats a time.Duration into HH:MM:SS string.

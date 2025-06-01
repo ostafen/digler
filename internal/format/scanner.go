@@ -14,16 +14,16 @@ type Scanner struct {
 	headers   []FileHeader
 	blockSize int
 
-	currBlockOff int
-	buf          []byte
-	r            *FileRegistry
-	logger       *slog.Logger
+	buf    []byte
+	r      *FileRegistry
+	logger *slog.Logger
 }
 
 type FileInfo struct {
+	Name   string
+	Format string
 	Offset uint64 // Offset in the file where the format starts
 	Size   uint64 // Size of the format in bytes
-	Format string // Format type (e.g., "MP3", "WAV")
 }
 
 func NewScanner(logger *slog.Logger, r *FileRegistry, bufferSize, blockSize int) *Scanner {
@@ -56,10 +56,9 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 
 			n = roundToMul(n, sc.blockSize) / sc.blockSize
 
-			sc.currBlockOff = int(blockOffset)
-
 			sc.scanBuffer(n, func(blockIdx int, hdr FileHeader) uint64 {
-				globalOffset := blockOffset + uint64(blockIdx)*uint64(sc.blockSize)
+				globalBlock := blockOffset/uint64(sc.blockSize) + uint64(blockIdx)
+				globalOffset := globalBlock * uint64(sc.blockSize)
 
 				pb.ProcessedBytes = int64(globalOffset)
 				pb.FilesFound = filesFound

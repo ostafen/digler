@@ -1,40 +1,31 @@
 package format
 
 import (
-	"math"
-
 	"github.com/ostafen/digler/pkg/table"
-	art "github.com/plar/go-adaptive-radix-tree/v2"
 )
 
 type FileRegistry struct {
-	table     *table.PrefixTable[headers]
-	minKeyLen int
+	table *table.PrefixTable[headers]
 }
 
 type headers []FileHeader
 
 func NewFileRegisty() *FileRegistry {
 	return &FileRegistry{
-		table:     table.New[headers](),
-		minKeyLen: math.MaxInt,
+		table: table.New[headers](),
 	}
 }
 
 func (r *FileRegistry) Add(hdr FileHeader) {
 	for _, sig := range hdr.Signatures {
-		key := art.Key(sig)
 		headers, _ := r.table.Get(sig)
 
 		r.table.Insert(
-			key,
+			sig,
 			append(headers, hdr),
 		)
-		r.minKeyLen = min(r.minKeyLen, len(key))
 	}
 }
-
-// TODO: consider wildcard matching for implementing offset
 
 // Searches the registry for headers where the key matches a prefix of `data`.
 // The search starts with `r.minKeyLen` and iteratively extends the key length
