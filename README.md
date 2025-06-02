@@ -103,6 +103,26 @@ Digler allows for the recovery of lost or deleted files based on their unique he
 - **Audio**: mp3, wav, flac
 - **Archives**: zip
 
+## Contributing
+
+Writing a comprehensive file carver is a complex challenge. Each supported file type often requires a format-specific decoder to properly identify, validate, and reconstruct data. This makes the development of Digler both technically demanding and highly modular — the perfect scenario for open source collaboration.
+
+We welcome contributions of all kinds, especially in areas like:
+
+- Implementing new file format decoders
+- Improving existing carving heuristics
+- Optimizing performance
+- Enhancing the CLI or UX
+- Writing tests, docs, or usage examples
+
+Whether you're familiar with Go or just interested in digital forensics, your help is appreciated.
+
+### Getting Started
+
+Before you start, **please open an issue** to discuss your idea or planned changes. This helps avoid duplicate work and keeps development aligned.
+
+Once you're ready, fork the repository and submit your pull request!
+
 ### License
 
 Digler is released under the **MIT License**.
