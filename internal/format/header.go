@@ -40,7 +40,9 @@ var fileHeaders = []FileHeader{
 	// image formats
 	jpegFileHeader,
 	pngFileHeader,
+	bmpFileHeader,
 	gifFileHeader,
+	pcxFileHeader,
 	// generic/documents formats
 	zipFileHeader,
 	pdfFileHeader,
