@@ -3,6 +3,16 @@
 </p>
 <h2 align="center">Digler - Go Deep. Get Back Your Data</h2>
 
+<p align="center">
+  <a href="https://github.com/ostafen/digler/actions/workflows/build.yml">
+    <img src="https://github.com/ostafen/digler/actions/workflows/build.yml/badge.svg" alt="Build Status">
+  </a>
+</p>
+
+## Why Digler?
+
+While many data recovery tools exist, there wasn’t yet a solution written in Go—a language well-suited for building fast, reliable, and maintainable software. Digler fills that gap by offering a simple, efficient, and cross-platform alternative focused on deep disk analysis and recovery.
+
 ## Features
 
 * **Broad Disk Image and Raw Device Support**: Analyze a wide array of disk image formats (`.dd`, `.img`, etc...) or directly access physical disks.
@@ -18,9 +28,7 @@
 
 ---
 
-## Getting Started
-
-### Installation
+## Installation
 
 **From Source:**
 
@@ -33,6 +41,58 @@ make build
 **From Precompiled Binaries:**
 
 Precompiled binaries will be available for Linux, macOS, and Windows on the Releases page.
+
+## Usage
+
+Digler follows a simple but powerful workflow: **scan first, recover later**. This approach lets you analyze disks or images thoroughly before extracting any files.
+
+### 1. Scan a Disk Image or Device
+```bash
+foo@bar$ digler scan <image_or_device>
+```
+
+Example:
+
+###
+```bash
+foo@bar$ digler scan dfrws-2006-challenge.raw
+```
+
+or, to scan an entire disk partition:
+
+###
+```bash
+foo@bar$ digler scan /dev/nvme0n1 # or C: on Windows
+```
+By default, the command generates a detailed DFXML report describing the findings, together with a detailed execution log. However, you can optionally specify a dump directory to to recover files immediately during scanning.
+
+```bash
+foo@bar$ --dump <path/to/dump/dir>
+```
+
+### 2. Mount Scan Results as a Filesystem (Linux only)
+```bash
+foo@bar$ digler mount <image_or_device> <report_file.xml> --mountpoint /path/to/mnt
+```
+
+Example:
+
+```bash
+digler mount dfrws-2006-challenge.raw report.xml --mountpoint /mnt/recover
+```
+
+This mounts a FUSE filesystem allowing you to browse and access recovered files directly from the scan report, without copying anything yet.
+
+### 3. Recover Files Based on Scan Report
+```bash
+foo@bar$ digler recover <image_or_device> <report_file.xml> --dir /path/to/dir
+```
+
+Example:
+
+```bash
+foo@bar$ digler recover dfrws-2006-challenge.raw report.xml --dir ./recover
+```
 
 ### Supported File Types
 
