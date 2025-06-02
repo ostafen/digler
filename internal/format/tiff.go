@@ -21,6 +21,6 @@ package format
 
 import "fmt"
 
-func ScanTIFF(data []byte) (uint64, error) {
-	return 0, fmt.Errorf("not implemented")
+func ScanTIFF(r *Reader) (*ScanResult, error) {
+	return nil, fmt.Errorf("not implemented")
 }
