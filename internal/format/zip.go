@@ -89,47 +89,37 @@ type ZipFileEntry struct {
 // and then iteratively parses file entries and central directory records to
 // determine the total size of the ZIP archive.
 func ScanZIP(r *Reader) (*ScanResult, error) {
-	// Peek at the first 4 bytes to check for the standard ZIP signature.
-	buf, err := r.Peek(4)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid signature", ErrInvalidZip)
-	}
+	var dec zipDecoder
 
-	if sig4 := binary.LittleEndian.Uint32(buf[:4]); sig4 != ZipSignature4 {
-		// If the standard 4-byte signature is not found, peek 8 bytes to check for WinZIPv8 signature.
-		_, err := r.Peek(8)
-		if err != nil {
-			return nil, err
-		}
-
-		if sig8 := binary.LittleEndian.Uint64(buf); sig8 != ZipSignature8 {
-			return nil, fmt.Errorf("%w: invalid signature", ErrInvalidZip)
-		}
+	if err := dec.readHeader(r); err != nil {
+		return nil, err
 	}
 
 	entries := 0
 
 	var hdrBuf [4]byte
 	for {
-		_, err = r.Read(hdrBuf[:])
+		_, err := r.Read(hdrBuf[:])
 		if err != nil {
 			return nil, err
 		}
 
-		var err error
 		switch hdr := binary.LittleEndian.Uint32(hdrBuf[:]); hdr {
 		case ZipFileEntryHeader:
-			err = parseZipFileEntry(r)
+			err = dec.parseZipFileEntry(r)
 			entries++
 		case ZipCentralDirHeader:
 			if entries == 0 {
 				return nil, fmt.Errorf("%w: zip file doesn't contain any file", ErrInvalidZip)
 			}
-			size, err := parseZipCentralDir(r)
+			size, err := dec.parseZipCentralDir(r)
 			if err != nil {
 				return nil, err
 			}
-			return &ScanResult{Size: size}, nil
+			return &ScanResult{
+				Size: size,
+				Ext:  dec.inferExt(),
+			}, nil
 		default:
 			return nil, ErrInvalidZip
 		}
@@ -139,10 +129,39 @@ func ScanZIP(r *Reader) (*ScanResult, error) {
 	}
 }
 
+type zipDecoder struct {
+	contentTypesSeen    bool
+	relsSeen            bool
+	wordDocumentSeen    bool
+	pptPresentationSeen bool
+	xlWorkbookSeen      bool
+}
+
+func (d *zipDecoder) readHeader(r *Reader) error {
+	// Peek at the first 4 bytes to check for the standard ZIP signature.
+	buf, err := r.Peek(4)
+	if err != nil {
+		return fmt.Errorf("%w: invalid signature", ErrInvalidZip)
+	}
+
+	if sig4 := binary.LittleEndian.Uint32(buf[:4]); sig4 != ZipSignature4 {
+		// If the standard 4-byte signature is not found, peek 8 bytes to check for WinZIPv8 signature.
+		_, err := r.Peek(8)
+		if err != nil {
+			return err
+		}
+
+		if sig8 := binary.LittleEndian.Uint64(buf); sig8 != ZipSignature8 {
+			return fmt.Errorf("%w: invalid signature", ErrInvalidZip)
+		}
+	}
+	return nil
+}
+
 // parseZipFileEntry parses a single local file entry in a ZIP file.
 // It reads the fixed-size ZipFileEntry struct, followed by the filename and extra fields.
 // It also handles the data descriptor if the corresponding flag is set.
-func parseZipFileEntry(r *Reader) error {
+func (dec *zipDecoder) parseZipFileEntry(r *Reader) error {
 	var entry ZipFileEntry
 	if err := binary.Read(r, binary.LittleEndian, &entry); err != nil {
 		return err
@@ -153,6 +172,7 @@ func parseZipFileEntry(r *Reader) error {
 	if err != nil {
 		return err
 	}
+	dec.processFileName(string(filenameBuf[:entry.FilenameLength]))
 
 	// Discard the extra field bytes if ExtraLength is greater than 0.
 	if entry.ExtraLength > 0 {
@@ -220,7 +240,7 @@ func seekToZIPDescriptor(r *Reader) error {
 // parseZipCentralDir parses the central directory record of a ZIP file.
 // It searches for the end of central directory (EOCD) signature and reads
 // the EOCD record to determine the total size of the ZIP archive.
-func parseZipCentralDir(r *Reader) (uint64, error) {
+func (dec *zipDecoder) parseZipCentralDir(r *Reader) (uint64, error) {
 	// The signature for the end of central directory record.
 	var eocdSig = []byte{0x50, 0x4B, 0x05, 0x06}
 
@@ -246,4 +266,40 @@ func parseZipCentralDir(r *Reader) (uint64, error) {
 	// The total ZIP size is the number of bytes read so far by the reader,
 	// plus the length of the ZIP file comment.
 	return r.BytesRead() + uint64(commentLen), nil
+}
+
+func (dec *zipDecoder) processFileName(name string) {
+	switch name {
+	case "[Content_Types].xml":
+		dec.contentTypesSeen = true
+	case "_rels/.rels":
+		dec.relsSeen = true
+	case "word/document.xml":
+		dec.wordDocumentSeen = true
+	case "ppt/presentation.xml":
+		dec.pptPresentationSeen = true
+	case "xl/workbook.xml":
+		dec.xlWorkbookSeen = true
+	}
+}
+
+func (dec *zipDecoder) inferExt() string {
+	isOfficeDocType := dec.contentTypesSeen && dec.relsSeen
+
+	isWordDoc := isOfficeDocType && dec.wordDocumentSeen
+	isPptDoc := isOfficeDocType && dec.pptPresentationSeen
+	isXlsDoc := isOfficeDocType && dec.xlWorkbookSeen
+
+	if isWordDoc {
+		return "docx"
+	}
+
+	if isPptDoc {
+		return "pptx"
+	}
+
+	if isXlsDoc {
+		return "xlsx"
+	}
+	return "zip"
 }
