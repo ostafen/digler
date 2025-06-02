@@ -1,3 +1,17 @@
+// Copyright 2011 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Package gif implements a GIF image decoder and encoder.
+//
+// The GIF specification is at https://www.w3.org/Graphics/GIF/spec-gif89a.txt.
+
+// Copyright 2025 Stefano Scafiti. All rights reserved.
+//
+// This file implements a GIF decoder derived from the one in the Go standard library.
+// It has been modified and extended specifically for file carving.
+//
+// Modifications are licensed under the MIT License; see the LICENSE file for details.
 package format
 
 import (
