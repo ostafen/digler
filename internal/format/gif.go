@@ -64,7 +64,7 @@ type gifDecoder struct {
 	tmp [1024]byte // must be at least 768 so we can read color table
 }
 
-func ScanGIF(r *Reader) (uint64, error) {
+func ScanGIF(r *Reader) (*ScanResult, error) {
 	d := gifDecoder{
 		loopCount: -1,
 		r:         r,
@@ -72,22 +72,22 @@ func ScanGIF(r *Reader) (uint64, error) {
 
 	err := d.readHeaderAndScreenDescriptor()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	for {
 		c, err := readByte(d.r.(io.ByteReader))
 		if err != nil {
-			return 0, fmt.Errorf("gif: reading frames: %v", err)
+			return nil, fmt.Errorf("gif: reading frames: %v", err)
 		}
 		switch c {
 		case sExtension:
 			if err = d.readExtension(); err != nil {
-				return 0, err
+				return nil, err
 			}
 		case sImageDescriptor:
 			if err = d.readImageDescriptor(); err != nil {
-				return 0, err
+				return nil, err
 			}
 
 			//if len(d.image) == 1 {
@@ -97,12 +97,11 @@ func ScanGIF(r *Reader) (uint64, error) {
 		case sTrailer:
 			if !d.dataParsed {
 				// If we haven't parsed the image descriptor, we can't have a valid image.
-				return 0, errors.New("gif: missing image data")
+				return nil, errors.New("gif: missing image data")
 			}
-			return r.n, nil
-
+			return &ScanResult{Size: r.n}, nil
 		default:
-			return 0, fmt.Errorf("gif: unknown block type: 0x%.2x", c)
+			return nil, fmt.Errorf("gif: unknown block type: 0x%.2x", c)
 		}
 	}
 }

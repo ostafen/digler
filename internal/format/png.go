@@ -153,7 +153,7 @@ func (d *decoder) verifyChecksum() error {
 	return nil
 }
 
-func ScanPNG(r *Reader) (uint64, error) {
+func ScanPNG(r *Reader) (*ScanResult, error) {
 	d := &decoder{
 		r:   r,
 		crc: crc32.NewIEEE(),
@@ -163,7 +163,7 @@ func ScanPNG(r *Reader) (uint64, error) {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
-		return 0, err
+		return nil, err
 	}
 
 	for d.stage != dsSeenIEND {
@@ -171,8 +171,8 @@ func ScanPNG(r *Reader) (uint64, error) {
 			if err == io.EOF {
 				err = io.ErrUnexpectedEOF
 			}
-			return 0, err
+			return nil, err
 		}
 	}
-	return r.BytesRead(), nil
+	return &ScanResult{Size: r.BytesRead()}, nil
 }

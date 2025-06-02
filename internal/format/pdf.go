@@ -57,15 +57,15 @@ var (
 //	uint64: The size of the carved PDF file in bytes.
 //	error: An error if the PDF header or EOF marker is not found, or if the
 //	       EOF marker appears before the header.
-func ScanPDF(r *Reader) (uint64, error) {
+func ScanPDF(r *Reader) (*ScanResult, error) {
 	var headerBuf [5]byte
 	_, err := r.Read(headerBuf[:])
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	if !bytes.Equal(headerBuf[:], pdfHeader) {
-		return 0, fmt.Errorf("invalid pdf file")
+		return nil, fmt.Errorf("invalid pdf file")
 	}
 
 	var size uint64
@@ -74,7 +74,7 @@ func ScanPDF(r *Reader) (uint64, error) {
 
 		seeked, err := SeekAt(r, eofMarker, pdfMaxFileSize)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		if !seeked {
 			break
@@ -82,14 +82,14 @@ func ScanPDF(r *Reader) (uint64, error) {
 
 		_, err = r.Discard(len(eofMarker))
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 
 		size = r.BytesRead() - n + uint64(len(eofMarker))
 	}
 
 	if size == 0 {
-		return 0, fmt.Errorf("invalid pdf file")
+		return nil, fmt.Errorf("invalid pdf file")
 	}
-	return size, nil
+	return &ScanResult{Size: size}, nil
 }

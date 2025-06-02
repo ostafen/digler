@@ -45,7 +45,7 @@ const (
 // for a valid WAV file. It returns the total size of the detected
 // WAV data, or 0 and an error if no valid WAV file is found at the beginning.
 // The reader's position will be at the end of the WAV data upon successful return.
-func ScanWAV(r *Reader) (uint64, error) {
+func ScanWAV(r *Reader) (*ScanResult, error) {
 	// We'll use a small buffer for reading headers and sizes.
 
 	var headerBuf [8]byte // For ChunkID and ChunkSize
@@ -54,14 +54,14 @@ func ScanWAV(r *Reader) (uint64, error) {
 	// Read Offset 0-3: ChunkID "RIFF" and Offset 4-7: ChunkSize
 	n, err := io.ReadFull(r, headerBuf[:])
 	if err != nil {
-		return 0, fmt.Errorf("failed to read RIFF chunk header: %w", err)
+		return nil, fmt.Errorf("failed to read RIFF chunk header: %w", err)
 	}
 	if n < 8 {
-		return 0, fmt.Errorf("reader too small (%d bytes) to contain RIFF chunk header", n)
+		return nil, fmt.Errorf("reader too small (%d bytes) to contain RIFF chunk header", n)
 	}
 
 	if string(headerBuf[0:4]) != "RIFF" {
-		return 0, fmt.Errorf("reader does not start with RIFF signature")
+		return nil, fmt.Errorf("reader does not start with RIFF signature")
 	}
 
 	// riffChunkSize is the total file size minus 8 bytes (RIFF ChunkID and ChunkSize themselves).
@@ -72,10 +72,10 @@ func ScanWAV(r *Reader) (uint64, error) {
 	waveFormatBuf := make([]byte, 4)
 	_, err = io.ReadFull(r, waveFormatBuf)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read WAVE format identifier: %w", err)
+		return nil, fmt.Errorf("failed to read WAVE format identifier: %w", err)
 	}
 	if string(waveFormatBuf) != "WAVE" {
-		return 0, fmt.Errorf("missing WAVE format identifier")
+		return nil, fmt.Errorf("missing WAVE format identifier")
 	}
 
 	bytesRead := uint64(12) // RIFF (8 bytes) + WAVE (4 bytes)
@@ -90,7 +90,7 @@ func ScanWAV(r *Reader) (uint64, error) {
 				// This indicates a truncated file, but we should still find fmt and data if possible.
 				break
 			}
-			return 0, fmt.Errorf("failed to read chunk header while searching for 'fmt ': %w", err)
+			return nil, fmt.Errorf("failed to read chunk header while searching for 'fmt ': %w", err)
 		}
 
 		chunkID := string(headerBuf[0:4])
@@ -99,14 +99,14 @@ func ScanWAV(r *Reader) (uint64, error) {
 
 		if chunkID == "fmt " {
 			if chunkSize != fmtChunkSizePCM {
-				return 0, fmt.Errorf("unsupported 'fmt ' chunk size (%d), expected %d for PCM", chunkSize, fmtChunkSizePCM)
+				return nil, fmt.Errorf("unsupported 'fmt ' chunk size (%d), expected %d for PCM", chunkSize, fmtChunkSizePCM)
 			}
 
 			// Read the fmt chunk data
 			fmtDataBuf := make([]byte, chunkSize)
 			n, err = io.ReadFull(r, fmtDataBuf)
 			if err != nil {
-				return 0, fmt.Errorf("failed to read 'fmt ' chunk data: %w", err)
+				return nil, fmt.Errorf("failed to read 'fmt ' chunk data: %w", err)
 			}
 			bytesRead += uint64(n)
 			fmtChunkFound = true
@@ -120,13 +120,13 @@ func ScanWAV(r *Reader) (uint64, error) {
 				// Truncated chunk data, but we might still find 'data' if it's earlier.
 				break
 			}
-			return 0, fmt.Errorf("failed to skip chunk data while searching for 'fmt ': %w", err)
+			return nil, fmt.Errorf("failed to skip chunk data while searching for 'fmt ': %w", err)
 		}
 		bytesRead += uint64(skipped)
 	}
 
 	if !fmtChunkFound {
-		return 0, fmt.Errorf("missing 'fmt ' sub-chunk")
+		return nil, fmt.Errorf("missing 'fmt ' sub-chunk")
 	}
 
 	// 3. Find and parse 'data' sub-chunk
@@ -141,7 +141,7 @@ func ScanWAV(r *Reader) (uint64, error) {
 				// Hit EOF before finding 'data' chunk, even if RIFF suggested more data.
 				break
 			}
-			return 0, fmt.Errorf("failed to read chunk header while searching for 'data': %w", err)
+			return nil, fmt.Errorf("failed to read chunk header while searching for 'data': %w", err)
 		}
 
 		chunkID := string(headerBuf[0:4])
@@ -163,15 +163,15 @@ func ScanWAV(r *Reader) (uint64, error) {
 			if err == io.EOF && skipped < int64(chunkSize) {
 				// Truncated chunk data, can't determine full WAV size
 				bytesRead += uint64(skipped)
-				return bytesRead, nil // Return what was read before truncation
+				return &ScanResult{Size: bytesRead}, nil // Return what was read before truncation
 			}
-			return 0, fmt.Errorf("failed to skip chunk data while searching for 'data': %w", err)
+			return nil, fmt.Errorf("failed to skip chunk data while searching for 'data': %w", err)
 		}
 		bytesRead += uint64(skipped)
 	}
 
 	if !dataChunkFound {
-		return 0, fmt.Errorf("missing 'data' sub-chunk")
+		return nil, fmt.Errorf("missing 'data' sub-chunk")
 	}
 
 	// The total WAV size is bytesRead (which is up to the start of data payload) + dataChunkSize.
@@ -180,22 +180,22 @@ func ScanWAV(r *Reader) (uint64, error) {
 	// If the RIFF chunk size was smaller than the calculated totalWAVSize,
 	// it means the file is truncated, and the actual valid data ends at the RIFF chunk boundary.
 	if totalWAVSize > uint64(riffChunkSize)+8 {
-		return uint64(riffChunkSize) + 8, nil // Return the size declared by RIFF if data chunk extends beyond it.
+		return &ScanResult{Size: uint64(riffChunkSize) + 8}, nil // Return the size declared by RIFF if data chunk extends beyond it.
 	}
 
 	// If the user wants to read the entire data chunk after this, they can do so
 	// using the returned totalWAVSize or by seeking the reader if it supports it.
 	// For this function, we assume the reader continues.
 	// We need to advance the reader past the data chunk for the returned bytesRead to be accurate.
-	skipped, err := io.CopyN(io.Discard, r, int64(dataChunkSize))
+	skipped, err := r.Discard(int(dataChunkSize))
 	if err != nil {
-		if err == io.EOF && skipped < int64(dataChunkSize) {
+		if err == io.EOF && skipped < int(dataChunkSize) {
 			// Data chunk is truncated. The valid WAV ends here.
-			return bytesRead + uint64(skipped), nil
+			return &ScanResult{Size: bytesRead + uint64(skipped)}, nil
 		}
-		return 0, fmt.Errorf("failed to skip 'data' chunk: %w", err)
+		return nil, fmt.Errorf("failed to skip 'data' chunk: %w", err)
 	}
 	bytesRead += uint64(skipped)
 
-	return totalWAVSize, nil
+	return &ScanResult{Size: totalWAVSize}, nil
 }
