@@ -112,7 +112,7 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 				stop = !yield(finfo)
 
 				filesFound++
-				return size
+				return res.Size
 			})
 			if err == io.EOF {
 				break

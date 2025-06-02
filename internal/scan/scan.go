@@ -166,7 +166,6 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 
 	sc := format.NewScanner(logger, registry, int(opts.ScanBufferSize), int(p.BlockSize))
 	for finfo := range sc.Scan(r, size) {
-		fmt.Println(finfo)
 		filesFound++
 		totalDataSize += finfo.Size
 
