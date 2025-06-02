@@ -71,24 +71,24 @@ func discard(n int, r io.Reader) error {
 // It returns the total size of the JPEG file (the offset of the EOI marker
 // plus its 2-byte length) or the buffer's length if the file appears truncated.
 // It returns an error if the file is malformed or doesn't start with an SOI marker.
-func ScanJPEG(r *Reader) (uint64, error) {
+func ScanJPEG(r *Reader) (*ScanResult, error) {
 	// Check for the Start Of Image marker.
 	var tmp [2]byte
 
 	_, err := r.Read(tmp[:])
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	if tmp[0] != 0xff || tmp[1] != soiMarker {
-		return 0, fmt.Errorf("missing SOI marker")
+		return nil, fmt.Errorf("missing SOI marker")
 	}
 
 	// Process the remaining segments until the End Of Image marker.
 	for {
 		_, err := r.Read(tmp[:])
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		for tmp[0] != 0xff {
 			// Strictly speaking, this is a format error. However, libjpeg is
@@ -114,7 +114,7 @@ func ScanJPEG(r *Reader) (uint64, error) {
 			tmp[0] = tmp[1]
 			tmp[1], err = r.ReadByte()
 			if err != nil {
-				return 0, err
+				return nil, err
 			}
 		}
 		marker := tmp[1]
@@ -127,11 +127,11 @@ func ScanJPEG(r *Reader) (uint64, error) {
 			// number of fill bytes, which are bytes assigned code X'FF'".
 			marker, err = r.ReadByte()
 			if err != nil {
-				return 0, err
+				return nil, err
 			}
 		}
 		if marker == eoiMarker { // End Of Image.
-			return uint64(r.BytesRead()), nil
+			return &ScanResult{Size: uint64(r.BytesRead())}, nil
 		}
 		if rst0Marker <= marker && marker <= rst7Marker {
 			// Figures B.2 and B.16 of the specification suggest that restart markers should
@@ -146,11 +146,11 @@ func ScanJPEG(r *Reader) (uint64, error) {
 		// Read the 16-bit length of the segment. The value includes the 2 bytes for the
 		// length itself, so we subtract 2 to get the number of remaining bytes.
 		if _, err = r.Read(tmp[:]); err != nil {
-			return 0, err
+			return nil, err
 		}
 		n := int(tmp[0])<<8 + int(tmp[1]) - 2
 		if n < 0 {
-			return 0, fmt.Errorf("short segment length")
+			return nil, fmt.Errorf("short segment length")
 		}
 
 		switch marker {
@@ -168,7 +168,7 @@ func ScanJPEG(r *Reader) (uint64, error) {
 			}
 		}
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 	}
 }

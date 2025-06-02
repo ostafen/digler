@@ -100,16 +100,16 @@ const (
 // It strictly expects a valid ASF Header Object at the beginning of the buffer,
 // then parses its internal objects to find the definitive file size from the
 // ASF File Properties Object.
-func ScanWMA(r *Reader) (uint64, error) {
+func ScanWMA(r *Reader) (*ScanResult, error) {
 	var buf [minASFHeaderObjSize]byte
 	_, err := r.Read(buf[:])
 	if err != nil {
-		return 0, nil
+		return nil, nil
 	}
 
 	// 2. Verify ASF Header Object GUID
 	if !bytes.Equal(buf[:16], asfHeaderGUID) {
-		return 0, errors.New("ASF header GUID not found at buffer start")
+		return nil, errors.New("ASF header GUID not found at buffer start")
 	}
 
 	// 3. Read critical fields from the ASF Header Object
@@ -121,7 +121,7 @@ func ScanWMA(r *Reader) (uint64, error) {
 	// Basic validation of the initial header object
 	// The C code checked `headerObjectSize < 30` and `numHeaderObjects < 4`.
 	if headerObjectSize < minASFHeaderObjSize || numHeaderObjects < 4 {
-		return 0, errors.New("invalid ASF Header Object structure or too few internal objects")
+		return nil, errors.New("invalid ASF Header Object structure or too few internal objects")
 	}
 
 	var totalFileSize uint64  // This will store the definitive file size from File Properties Object
@@ -136,12 +136,12 @@ func ScanWMA(r *Reader) (uint64, error) {
 	for i := uint32(0); i < numHeaderObjects; i++ {
 		// Also ensure the current object doesn't spill past the main Header Object's declared boundary.
 		if bytesRead+minGeneralSubObjectHeaderSize > headerObjectSize {
-			return 0, errors.New("malformed ASF header: sub-object extends beyond parent header")
+			return nil, errors.New("malformed ASF header: sub-object extends beyond parent header")
 		}
 
 		_, err := r.Read(buf[:minGeneralSubObjectHeaderSize])
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 
 		// Read the sub-object's ID and Size
@@ -153,7 +153,7 @@ func ScanWMA(r *Reader) (uint64, error) {
 
 		const maxSafeObjectSize = uint64(1000 * 1024 * 1024 * 2) // 2GB as a sanity check
 		if objSize < minGeneralSubObjectHeaderSize || objSize > maxSafeObjectSize {
-			return 0, fmt.Errorf("invalid ASF internal object size: %d", objSize)
+			return nil, fmt.Errorf("invalid ASF internal object size: %d", objSize)
 		}
 
 		// Ensure the entire sub-object fits within the buffer. If not, the file is truncated.
@@ -163,26 +163,26 @@ func ScanWMA(r *Reader) (uint64, error) {
 
 		// Also ensure it fits within the main Header Object's declared bounds.
 		if bytesRead+objSize > headerObjectSize {
-			return 0, errors.New("malformed ASF header: sub-object extends beyond header boundary")
+			return nil, errors.New("malformed ASF header: sub-object extends beyond header boundary")
 		}
 
 		// Check for specific ASF object types
 		if bytes.Equal(objID, asfFilePropGUID) {
 			// Found the ASF File Properties Object
 			if objSize < minFilePropObjSize { // PhotoRec's C code check for min size 0x28 (40 bytes)
-				return 0, errors.New("invalid ASF File Properties Object size")
+				return nil, errors.New("invalid ASF File Properties Object size")
 			}
 
 			buf, err := r.Peek(minFilePropObjSize - minGeneralSubObjectHeaderSize)
 			if err != nil {
-				return 0, err
+				return nil, err
 			}
 
 			// The file_size field is at offset `filePropFileSizeOffset` within this object.
 			fileSizeFieldOffset := bytesRead + filePropFileSizeOffset
 			//fileSizeFieldOffset+8 > bufLen ||
 			if fileSizeFieldOffset+8 > bytesRead+objSize {
-				return 0, errors.New("truncated ASF File Properties Object for 'file_size'")
+				return nil, errors.New("truncated ASF File Properties Object for 'file_size'")
 			}
 
 			totalFileSize = binary.LittleEndian.Uint64(buf[16 : 16+8])
@@ -190,16 +190,16 @@ func ScanWMA(r *Reader) (uint64, error) {
 			// PhotoRec C code checked `size < 30+104` (30 is minASFHeaderObjSize). This is a heuristic.
 			// Let's ensure the reported totalFileSize is at least big enough for the basic header.
 			if totalFileSize < headerObjectSize { // At least the size of the initial header block
-				return 0, errors.New("invalid total file size in File Properties Object")
+				return nil, errors.New("invalid total file size in File Properties Object")
 			}
 		} else if bytes.Equal(objID, asfStreamPropGUID) {
 			buf, err := r.Peek(minFilePropObjSize - minStreamPropObjSize)
 			if err != nil {
-				return 0, err
+				return nil, err
 			}
 			// Found the ASF Stream Properties Object
 			if objSize < minStreamPropObjSize { // PhotoRec's C code check for min size 0x28 (40 bytes)
-				return 0, errors.New("invalid ASF Stream Properties Object size")
+				return nil, errors.New("invalid ASF Stream Properties Object size")
 			}
 
 			// Check if this is a WMA stream type
@@ -207,7 +207,7 @@ func ScanWMA(r *Reader) (uint64, error) {
 
 			//streamTypeFieldOffset+16 > bufLen
 			if streamTypeFieldOffset+16 > bytesRead+objSize {
-				return 0, errors.New("truncated ASF Stream Properties Object for 'stream_type'")
+				return nil, errors.New("truncated ASF Stream Properties Object for 'stream_type'")
 			}
 
 			streamType := buf[:16]
@@ -219,7 +219,7 @@ func ScanWMA(r *Reader) (uint64, error) {
 
 		_, err = r.Discard(int(objSize - 24))
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		bytesRead += objSize // Move to the start of the next sub-object
 	}
@@ -229,21 +229,21 @@ func ScanWMA(r *Reader) (uint64, error) {
 	// We need to have found a definitive total file size from the File Properties Object.
 
 	if totalFileSize == 0 {
-		return 0, errors.New("WMA file size not definitively determined from ASF structure")
+		return nil, errors.New("WMA file size not definitively determined from ASF structure")
 	}
 
-	// PhotoRec's C code also had a check: `if(size > 0 && size < offset_prop) return 0;`
+	// PhotoRec's C code also had a check: `if(size > 0 && size < offset_prop) return nil;`
 	// This means the declared total file size must be at least as large as the combined size of all header objects parsed.
 	if totalFileSize < bytesRead {
-		return 0, errors.New("inconsistent WMA file size: declared size is smaller than parsed header")
+		return nil, errors.New("inconsistent WMA file size: declared size is smaller than parsed header")
 	}
 
 	// For a strict WMA file, we should confirm at least one WMA audio stream exists.
 	if !isWMAStreamFound {
-		return 0, errors.New("no WMA audio stream found in ASF header")
+		return nil, errors.New("no WMA audio stream found in ASF header")
 	}
 
 	// If the calculated total file size extends beyond the buffer, it's a truncated file.
-	return totalFileSize, nil
+	return &ScanResult{Size: totalFileSize}, nil
 
 }

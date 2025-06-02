@@ -49,7 +49,7 @@ const (
 // for a valid AU file. It returns the total size of the detected
 // AU data, or 0 and an error if no valid AU file is found at the beginning.
 // The reader's position will be at the end of the AU data upon successful return.
-func ScanSunAudio(r *Reader) (uint64, error) {
+func ScanSunAudio(r *Reader) (*ScanResult, error) {
 	// We'll use a 24-byte buffer for the fixed part of the AU header.
 	headerBuf := make([]byte, MIN_AU_HEADER_SIZE)
 
@@ -57,21 +57,21 @@ func ScanSunAudio(r *Reader) (uint64, error) {
 	n, err := io.ReadFull(r, headerBuf)
 	if err != nil {
 		if err == io.EOF {
-			return 0, fmt.Errorf("reader too small (%d bytes) to contain a minimum AU header (%d bytes)", n, MIN_AU_HEADER_SIZE)
+			return nil, fmt.Errorf("reader too small (%d bytes) to contain a minimum AU header (%d bytes)", n, MIN_AU_HEADER_SIZE)
 		}
-		return 0, fmt.Errorf("failed to read AU header: %w", err)
+		return nil, fmt.Errorf("failed to read AU header: %w", err)
 	}
 
 	// 1. Check Magic Number (Big Endian)
 	magic := binary.BigEndian.Uint32(headerBuf[0:4])
 	if magic != AU_MAGIC {
-		return 0, fmt.Errorf("reader does not start with AU magic signature")
+		return nil, fmt.Errorf("reader does not start with AU magic signature")
 	}
 
 	// 2. Read Header Size (Big Endian)
 	headerSize := binary.BigEndian.Uint32(headerBuf[4:8])
 	if headerSize < MIN_AU_HEADER_SIZE {
-		return 0, fmt.Errorf("AU header size (%d) is invalid", headerSize)
+		return nil, fmt.Errorf("AU header size (%d) is invalid", headerSize)
 	}
 
 	// 3. Read Data Size (Big Endian)
@@ -87,9 +87,9 @@ func ScanSunAudio(r *Reader) (uint64, error) {
 		if err != nil {
 			if err == io.EOF && skipped < int(skipBytes) {
 				// Header is truncated, cannot be a valid AU file.
-				return 0, fmt.Errorf("AU header truncated: expected %d bytes, got %d", headerSize, MIN_AU_HEADER_SIZE+uint32(skipped))
+				return nil, fmt.Errorf("AU header truncated: expected %d bytes, got %d", headerSize, MIN_AU_HEADER_SIZE+uint32(skipped))
 			}
-			return 0, fmt.Errorf("failed to skip remaining header bytes: %w", err)
+			return nil, fmt.Errorf("failed to skip remaining header bytes: %w", err)
 		}
 		bytesRead += uint64(skipped)
 	}
@@ -100,7 +100,7 @@ func ScanSunAudio(r *Reader) (uint64, error) {
 		// We've read the header, so the remaining size is what's left in the reader.
 		// Since we don't know the full length, we'll return the bytes read so far.
 		// The caller would typically read until EOF for the data.
-		return bytesRead, nil // Indicate that the valid part up to the header is found
+		return &ScanResult{Size: bytesRead}, nil // Indicate that the valid part up to the header is found
 	} else {
 		// Data size is explicitly defined.
 		totalAUSize = uint64(headerSize) + uint64(dataSize)
@@ -114,14 +114,14 @@ func ScanSunAudio(r *Reader) (uint64, error) {
 			if err != nil {
 				if err == io.EOF && skipped < dataBytesToRead {
 					// Data chunk is truncated. The valid AU ends here.
-					return bytesRead + uint64(skipped), nil
+					return &ScanResult{Size: bytesRead + uint64(skipped)}, nil
 				}
-				return 0, fmt.Errorf("failed to skip AU data: %w", err)
+				return nil, fmt.Errorf("failed to skip AU data: %w", err)
 			}
 			bytesRead += uint64(skipped)
 		}
 	}
 
 	// If we reach here, we've successfully scanned and potentially skipped all valid AU data.
-	return totalAUSize, nil
+	return &ScanResult{Size: totalAUSize}, nil
 }

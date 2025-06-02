@@ -88,22 +88,22 @@ type ZipFileEntry struct {
 // It reads the initial bytes to identify the ZIP signature (standard or WinZIPv8)
 // and then iteratively parses file entries and central directory records to
 // determine the total size of the ZIP archive.
-func ScanZIP(r *Reader) (uint64, error) {
+func ScanZIP(r *Reader) (*ScanResult, error) {
 	// Peek at the first 4 bytes to check for the standard ZIP signature.
 	buf, err := r.Peek(4)
 	if err != nil {
-		return 0, fmt.Errorf("%w: invalid signature", ErrInvalidZip)
+		return nil, fmt.Errorf("%w: invalid signature", ErrInvalidZip)
 	}
 
 	if sig4 := binary.LittleEndian.Uint32(buf[:4]); sig4 != ZipSignature4 {
 		// If the standard 4-byte signature is not found, peek 8 bytes to check for WinZIPv8 signature.
 		_, err := r.Peek(8)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 
 		if sig8 := binary.LittleEndian.Uint64(buf); sig8 != ZipSignature8 {
-			return 0, fmt.Errorf("%w: invalid signature", ErrInvalidZip)
+			return nil, fmt.Errorf("%w: invalid signature", ErrInvalidZip)
 		}
 	}
 
@@ -113,7 +113,7 @@ func ScanZIP(r *Reader) (uint64, error) {
 	for {
 		_, err = r.Read(hdrBuf[:])
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 
 		var err error
@@ -123,14 +123,18 @@ func ScanZIP(r *Reader) (uint64, error) {
 			entries++
 		case ZipCentralDirHeader:
 			if entries == 0 {
-				return 0, fmt.Errorf("%w: zip file doesn't contain any file", ErrInvalidZip)
+				return nil, fmt.Errorf("%w: zip file doesn't contain any file", ErrInvalidZip)
 			}
-			return parseZipCentralDir(r)
+			size, err := parseZipCentralDir(r)
+			if err != nil {
+				return nil, err
+			}
+			return &ScanResult{Size: size}, nil
 		default:
-			return 0, ErrInvalidZip
+			return nil, ErrInvalidZip
 		}
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 	}
 }

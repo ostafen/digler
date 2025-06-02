@@ -215,14 +215,14 @@ func parseMP3Header(headerBytes []byte) (mp3Header, bool) {
 // of the detected stream within the buffer, or 0 and an error if no
 // valid stream is found. An optional ID3v2 tag at the very beginning
 // is allowed and skipped.
-func ScanMP3(r *Reader) (uint64, error) {
+func ScanMP3(r *Reader) (*ScanResult, error) {
 	var n int // Tracks the current position in the buffer
 
 	// Check for and skip an initial ID3v2 tag (if present)
 	// This is the only non-audio content allowed at the very start of the stream.
 	skippedBytes, err := skipID3v2Tag(r)
 	if err != nil {
-		return 0, fmt.Errorf("error processing initial ID3v2 tag: %w", err)
+		return nil, fmt.Errorf("error processing initial ID3v2 tag: %w", err)
 	}
 	n += skippedBytes // Move past the ID3v2 tag
 
@@ -236,7 +236,7 @@ func ScanMP3(r *Reader) (uint64, error) {
 		// This is critical for subsequent iterations to get the next frame's header.
 		_, err = r.Read(headerBytes[:])
 		if err != nil && err != io.EOF {
-			return 0, err
+			return nil, err
 		}
 		if err == io.EOF {
 			break
@@ -249,11 +249,11 @@ func ScanMP3(r *Reader) (uint64, error) {
 		}
 
 		if header.FrameSize < minMp3FrameSize || header.FrameSize > maxMp3FrameSize {
-			return 0, fmt.Errorf("invalid mp3 frame size")
+			return nil, fmt.Errorf("invalid mp3 frame size")
 		}
 
 		if _, err := r.Discard(header.FrameSize - 4); err != nil {
-			return 0, err
+			return nil, err
 		}
 
 		n += header.FrameSize
@@ -264,7 +264,7 @@ func ScanMP3(r *Reader) (uint64, error) {
 	// Requiring at least 2 frames provides more confidence.
 	const MinimumRequiredFrames = 2
 	if numFrames < MinimumRequiredFrames {
-		return 0, fmt.Errorf("detected MP3 stream is too short (only %d frames)", numFrames)
+		return nil, fmt.Errorf("detected MP3 stream is too short (only %d frames)", numFrames)
 	}
-	return uint64(n), nil
+	return &ScanResult{Size: uint64(n)}, nil
 }

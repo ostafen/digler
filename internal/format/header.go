@@ -19,10 +19,16 @@
 // THE SOFTWARE.
 package format
 
+type ScanResult struct {
+	Name string
+	Ext  string
+	Size uint64
+}
+
 type FileHeader struct {
 	Ext        string // File extension, e.g., "mp3", "wav"
 	Signatures [][]byte
-	ScanFile   func(r *Reader) (uint64, error)
+	ScanFile   func(r *Reader) (*ScanResult, error)
 }
 
 var fileHeaders = []FileHeader{

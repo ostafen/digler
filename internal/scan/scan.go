@@ -166,20 +166,20 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 
 	sc := format.NewScanner(logger, registry, int(opts.ScanBufferSize), int(p.BlockSize))
 	for finfo := range sc.Scan(r, size) {
+		fmt.Println(finfo)
 		filesFound++
 		totalDataSize += finfo.Size
 
-		fileName := fmt.Sprintf("f_%d.%s", finfo.Offset/uint64(p.BlockSize), finfo.Format)
 		if opts.DumpDir != "" {
 			fileReader := io.NewSectionReader(r, int64(finfo.Offset), int64(finfo.Size))
-			err := dumpFile(opts.DumpDir, fileName, fileReader)
+			err := dumpFile(opts.DumpDir, finfo.Name, fileReader)
 			if err != nil {
 				return err
 			}
 		}
 
 		err := reportFileWriter.WriteFileObject(dfxml.FileObject{
-			Filename: fileName,
+			Filename: finfo.Name,
 			FileSize: uint64(finfo.Size),
 			ByteRuns: dfxml.ByteRuns{
 				Runs: []dfxml.ByteRun{{

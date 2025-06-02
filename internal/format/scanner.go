@@ -22,6 +22,7 @@ package format
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
@@ -40,7 +41,7 @@ type Scanner struct {
 
 type FileInfo struct {
 	Name   string
-	Format string
+	Ext    string
 	Offset uint64 // Offset in the file where the format starts
 	Size   uint64 // Size of the format in bytes
 }
@@ -96,16 +97,17 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 					),
 				)
 
-				size, err := hdr.ScanFile(fileReader)
+				res, err := hdr.ScanFile(fileReader)
 				if err != nil {
 					return 0
 				}
 
-				finfo := FileInfo{
-					Offset: globalOffset,
-					Size:   size,
-					Format: hdr.Ext,
-				}
+				finfo := scanResultToFileInfo(
+					res,
+					uint32(globalBlock),
+					globalOffset,
+					hdr.Ext,
+				)
 
 				stop = !yield(finfo)
 
@@ -145,4 +147,28 @@ func (sc *Scanner) scanBuffer(n int, scanFile func(blockIdx int, hdr FileHeader)
 func roundToMul(n, m int) int {
 	k := (n + m - 1) / m
 	return k * m
+}
+
+func scanResultToFileInfo(
+	res *ScanResult,
+	block uint32,
+	offset uint64,
+	defaultExt string,
+) FileInfo {
+	ext := defaultExt
+	if res.Ext != "" {
+		ext = res.Ext
+	}
+
+	name := res.Name
+	if name == "" {
+		name = fmt.Sprintf("f%d.%s", block, ext)
+	}
+
+	return FileInfo{
+		Name:   name,
+		Ext:    ext,
+		Offset: offset,
+		Size:   res.Size,
+	}
 }
