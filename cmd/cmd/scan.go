@@ -39,7 +39,7 @@ func DefineScanCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringP("dump", "d", "", "dump the found files to the specified directory")
-	cmd.Flags().Uint64("block-size", 0, "enforce a specific block size during scanning")
+	cmd.Flags().String("block-size", "0", "use the specified block size during scanning")
 	cmd.Flags().String("scan-buffer-size", "4MB", "the size of the scan buffer")
 	cmd.Flags().String("max-scan-size", "", "max number of bytes to scan")
 	cmd.Flags().String("max-file-size", "4GB", "maximum size of a carved file")

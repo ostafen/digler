@@ -102,6 +102,11 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 	}
 	defer outFile.Close()
 
+	blockSize := p.BlockSize
+	if opts.BlockSize != 0 {
+		blockSize = uint32(opts.BlockSize)
+	}
+
 	reportFileWriter := dfxml.NewDFXMLWriter(outFile)
 	defer reportFileWriter.Close()
 
@@ -115,7 +120,7 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		},
 		Source: dfxml.Source{
 			ImageFilename: filePath,
-			SectorSize:    int(p.BlockSize),
+			SectorSize:    int(blockSize),
 			ImageSize:     uint64(imgInfo.Size()),
 		},
 	})
@@ -180,7 +185,7 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		logger,
 		registry,
 		int(opts.ScanBufferSize),
-		int(p.BlockSize),
+		int(blockSize),
 		opts.MaxFileSize,
 	)
 	for finfo := range sc.Scan(r, size) {
