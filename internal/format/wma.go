@@ -27,7 +27,8 @@ import (
 )
 
 var wmaFileHeader = FileHeader{
-	Ext: "wma",
+	Ext:         "wma",
+	Description: "Windows Media Audio Format",
 	Signatures: [][]byte{
 		asfHeaderGUID,
 	},

@@ -19,6 +19,8 @@
 // THE SOFTWARE.
 package format
 
+import "fmt"
+
 type ScanResult struct {
 	Name string
 	Ext  string
@@ -26,9 +28,10 @@ type ScanResult struct {
 }
 
 type FileHeader struct {
-	Ext        string // File extension, e.g., "mp3", "wav"
-	Signatures [][]byte
-	ScanFile   func(r *Reader) (*ScanResult, error)
+	Ext         string // File extension, e.g., "mp3", "wav"
+	Description string
+	Signatures  [][]byte
+	ScanFile    func(r *Reader) (*ScanResult, error)
 }
 
 var fileHeaders = []FileHeader{
@@ -43,31 +46,41 @@ var fileHeaders = []FileHeader{
 	bmpFileHeader,
 	gifFileHeader,
 	pcxFileHeader,
+	tiffFileHeader,
 	// generic/documents formats
 	zipFileHeader,
 	pdfFileHeader,
 }
 
-func BuildFileRegistry() *FileRegistry {
-	r := NewFileRegisty()
+func FileHeaders(ext ...string) ([]FileHeader, error) {
+	if len(ext) == 0 {
+		return fileHeaders, nil
+	}
+
+	headersByExt := make(map[string]FileHeader)
 	for _, hdr := range fileHeaders {
+		headersByExt[hdr.Ext] = hdr
+	}
+
+	headers := make([]FileHeader, len(ext))
+	for i, e := range ext {
+		hdr, ok := headersByExt[e]
+		if !ok {
+			return nil, fmt.Errorf("unknown file extension: \"%s\"", hdr.Ext)
+		}
+		headers[i] = hdr
+	}
+	return headers, nil
+}
+
+func BuildFileRegistry(headers ...FileHeader) *FileRegistry {
+	r := NewFileRegisty()
+	for _, hdr := range headers {
 		r.Add(hdr)
 	}
 	return r
 }
 
-func (r *FileRegistry) Formats() []string {
-	formats := make([]string, len(fileHeaders))
-	for i := range formats {
-		formats[i] = fileHeaders[i].Ext
-	}
-	return formats
-}
-
 func (r *FileRegistry) Signatures() int {
-	n := 0
-	for _, hdr := range fileHeaders {
-		n += len(hdr.Signatures)
-	}
-	return n
+	return r.table.Size()
 }

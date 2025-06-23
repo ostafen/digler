@@ -26,7 +26,8 @@ import (
 )
 
 var sunAudioFileHeader = FileHeader{
-	Ext: "au",
+	Ext:         "au",
+	Description: "Audio file format developed by Sun Microsystems",
 	Signatures: [][]byte{
 		{0x2E, 0x73, 0x6E, 0x64},
 	},

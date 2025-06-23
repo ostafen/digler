@@ -44,7 +44,9 @@ type Options struct {
 	MaxScanSize    uint64
 	ScanBufferSize uint64
 	BlockSize      uint64
+	MaxFileSize    uint64
 	DisableLog     bool
+	FileExt        []string
 	LogLevel       slog.Level
 }
 
@@ -126,11 +128,21 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		logFilePath = absPath(filepath.Join(opts.DumpDir, session) + ".log")
 	}
 
-	registry := format.BuildFileRegistry()
+	headers, err := format.FileHeaders(opts.FileExt...)
+	if err != nil {
+		return err
+	}
+
+	registry := format.BuildFileRegistry(headers...)
+
+	fileExts := make([]string, len(headers))
+	for i := range headers {
+		fileExts[i] = headers[i].Ext
+	}
 
 	fmt.Println("[INFO] Starting scanning operation...")
 	fmt.Printf("[INFO] Source: \t%s\n", absPath(filePath))
-	fmt.Printf("[INFO] File Types: \t%s\n", strings.Join(registry.Formats(), ","))
+	fmt.Printf("[INFO] File Types: \t%s\n", strings.Join(fileExts, ","))
 
 	if opts.DumpDir != "" {
 		fmt.Printf("[INFO] Destination: \t%s\n", absPath(opts.DumpDir))
@@ -164,7 +176,13 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 	filesFound := 0
 	var totalDataSize uint64 = 0
 
-	sc := format.NewScanner(logger, registry, int(opts.ScanBufferSize), int(p.BlockSize))
+	sc := format.NewScanner(
+		logger,
+		registry,
+		int(opts.ScanBufferSize),
+		int(p.BlockSize),
+		opts.MaxFileSize,
+	)
 	for finfo := range sc.Scan(r, size) {
 		filesFound++
 		totalDataSize += finfo.Size

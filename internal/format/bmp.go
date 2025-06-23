@@ -28,7 +28,8 @@ import (
 )
 
 var bmpFileHeader = FileHeader{
-	Ext: "bmp",
+	Ext:         "bmp",
+	Description: "Bitmap Image File Format",
 	Signatures: [][]byte{
 		[]byte("BM"),
 	},

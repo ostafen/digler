@@ -27,7 +27,8 @@ import (
 )
 
 var mp3FileHeader = FileHeader{
-	Ext: "mp3",
+	Ext:         "mp3",
+	Description: "MPEG Audio Layer III audio format",
 	Signatures: [][]byte{
 		{0xFF, 0xFA},
 		{0xFF, 0xFB},

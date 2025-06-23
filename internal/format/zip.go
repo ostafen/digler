@@ -30,7 +30,8 @@ import (
 )
 
 var zipFileHeader = FileHeader{
-	Ext: "zip",
+	Ext:         "zip",
+	Description: "Archive File Format for Lossless Data Compression",
 	Signatures: [][]byte{
 		{'P', 'K', 0x03, 0x04},
 		{'P', 'K', '0', '0', 'P', 'K', 0x03, 0x04},
