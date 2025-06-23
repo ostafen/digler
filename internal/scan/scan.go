@@ -20,11 +20,9 @@
 package scan
 
 import (
-	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,8 +32,10 @@ import (
 	"github.com/ostafen/digler/internal/env"
 	"github.com/ostafen/digler/internal/format"
 	"github.com/ostafen/digler/internal/fs"
+	"github.com/ostafen/digler/internal/logger"
 	"github.com/ostafen/digler/pkg/dfxml"
 	fmtutil "github.com/ostafen/digler/pkg/util/format"
+	ioutil "github.com/ostafen/digler/pkg/util/io"
 )
 
 type Options struct {
@@ -47,7 +47,7 @@ type Options struct {
 	MaxFileSize    uint64
 	DisableLog     bool
 	FileExt        []string
-	LogLevel       slog.Level
+	LogLevel       logger.Level
 }
 
 func Scan(filePath string, opts Options) error {
@@ -140,20 +140,28 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		fileExts[i] = headers[i].Ext
 	}
 
-	fmt.Println("[INFO] Starting scanning operation...")
-	fmt.Printf("[INFO] Source: \t%s\n", absPath(filePath))
-	fmt.Printf("[INFO] File Types: \t%s\n", strings.Join(fileExts, ","))
+	logger, logFile, err := setupLogger(logFilePath, opts.LogLevel)
+	if err != nil {
+		return err
+	}
+	if logFile != nil {
+		defer logFile.Close()
+	}
+
+	logger.Info("Starting scanning operation...")
+	logger.Infof("Source: \t%s", absPath(filePath))
+	logger.Infof("File Types: \t%s", strings.Join(fileExts, ","))
 
 	if opts.DumpDir != "" {
-		fmt.Printf("[INFO] Destination: \t%s\n", absPath(opts.DumpDir))
+		logger.Infof("Destination: \t%s", absPath(opts.DumpDir))
 	}
 
 	outLog := "disabled"
 	if !opts.DisableLog {
 		outLog = logFilePath
 	}
-	fmt.Printf("[INFO] Output Log: \t%s\n", outLog)
-	fmt.Printf("[INFO] Scanning for %d signatures...\n", registry.Signatures())
+	logger.Infof("Output Log: \t%s", outLog)
+	logger.Infof("Scanning for %d signatures...", registry.Signatures())
 
 	size := min(opts.MaxScanSize, p.Size)
 	r := io.NewSectionReader(f, int64(p.Offset), int64(size))
@@ -162,14 +170,6 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		if err := os.MkdirAll(opts.DumpDir, 0755); err != nil {
 			return err
 		}
-	}
-
-	logger, logFile, err := setupLogger(logFilePath, opts.LogLevel)
-	if err != nil {
-		return err
-	}
-	if logFile != nil {
-		defer logFile.Close()
 	}
 
 	start := time.Now()
@@ -189,7 +189,8 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 
 		if opts.DumpDir != "" {
 			fileReader := io.NewSectionReader(r, int64(finfo.Offset), int64(finfo.Size))
-			err := dumpFile(opts.DumpDir, finfo.Name, fileReader)
+
+			err := ioutil.CopyFile(filepath.Join(opts.DumpDir, finfo.Name), fileReader)
 			if err != nil {
 				return err
 			}
@@ -207,37 +208,20 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 			},
 		})
 		if err != nil {
-			logger.Error("unable to write index entry", "err", err)
+			logger.Errorf("unable to write index entry: %s", err)
 		}
 	}
 
-	fmt.Println()
-
-	fmt.Printf("[INFO] Scan completed!\n")
-	fmt.Printf("[INFO] Files found: \t%d\n", filesFound)
-	fmt.Printf("[INFO] Total data: \t%s\n", fmtutil.FormatBytes(int64(size)))
-	fmt.Printf("[INFO] Duration: \t%s\n", FormatDurationHMS(time.Since(start)))
-	fmt.Printf("[INFO] Report saved to: \t%s\n", absPath(reportFileName))
+	logger.Infof("Scan completed!")
+	logger.Infof("Files found: \t%d", filesFound)
+	logger.Infof("Total data: \t%s", fmtutil.FormatBytes(int64(size)))
+	logger.Infof("Duration: \t%s", FormatDurationHMS(time.Since(start)))
+	logger.Infof("Report saved to: \t%s", absPath(reportFileName))
 
 	if !opts.DisableLog {
-		fmt.Printf("[INFO] Detailed scan log: \t%s\n", logFilePath)
+		logger.Infof("Detailed scan log: \t%s", logFilePath)
 	}
 	return nil
-}
-
-func dumpFile(dumpDir string, fileName string, r io.Reader) error {
-	f, err := os.Create(filepath.Join(dumpDir, fileName))
-	if err != nil {
-		return fmt.Errorf("failed to create file %q: %w", fileName, err)
-	}
-	defer f.Close()
-
-	w := bufio.NewWriterSize(f, 1024*1024) // 1MB buffer
-
-	if _, err := io.Copy(w, r); err != nil {
-		return err
-	}
-	return w.Flush()
 }
 
 func DiscoverPartitions(path string) ([]disk.Partition, error) {
@@ -374,13 +358,11 @@ func FormatDurationHMS(d time.Duration) string {
 // - minLevel: The minimum log level to write.
 // It returns the logger instance and the *os.File, which will be nil if logging to file is disabled.
 // The returned *os.File (if not nil) should be closed by the caller.
-func setupLogger(logFilePath string, minLevel slog.Level) (*slog.Logger, *os.File, error) {
-	var writer io.Writer
+func setupLogger(logFilePath string, minLevel logger.Level) (*logger.Logger, *os.File, error) {
+	var w io.Writer = os.Stdout
 	var file *os.File
 
-	if logFilePath == "" {
-		writer = io.Discard
-	} else {
+	if logFilePath != "" {
 		logDir := filepath.Dir(logFilePath)
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			return nil, nil, fmt.Errorf("failed to create log directory %q: %w", logDir, err)
@@ -390,15 +372,11 @@ func setupLogger(logFilePath string, minLevel slog.Level) (*slog.Logger, *os.Fil
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to open log file %q: %w", logFilePath, err)
 		}
-		writer = f
+
+		w = io.MultiWriter(os.Stdout, f)
 		file = f
 	}
 
-	handler := slog.NewTextHandler(writer, &slog.HandlerOptions{
-		Level:     minLevel,
-		AddSource: true,
-	})
-
-	logger := slog.New(handler)
+	logger := logger.New(w, logger.Level(minLevel))
 	return logger, file, nil
 }

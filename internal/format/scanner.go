@@ -23,8 +23,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log/slog"
 
+	"github.com/ostafen/digler/internal/logger"
 	"github.com/ostafen/digler/pkg/pbar"
 	"github.com/ostafen/digler/pkg/reader"
 )
@@ -35,7 +35,7 @@ type Scanner struct {
 	buf         []byte
 
 	r         *FileRegistry
-	logger    *slog.Logger
+	logger    *logger.Logger
 	bufReader *reader.BufferedReadSeeker
 }
 
@@ -47,7 +47,7 @@ type FileInfo struct {
 }
 
 func NewScanner(
-	logger *slog.Logger,
+	logger *logger.Logger,
 	r *FileRegistry,
 	bufferSize,
 	blockSize int,
@@ -68,6 +68,7 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 		stop := false
 
 		pb := pbar.NewProgressBarState(int64(size))
+		defer pb.Finish()
 
 		filesFound := 0
 
