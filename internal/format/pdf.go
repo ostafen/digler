@@ -25,9 +25,10 @@ import (
 )
 
 var pdfFileHeader = FileHeader{
-	Ext:        "pdf",
-	Signatures: [][]byte{pdfHeader},
-	ScanFile:   ScanPDF,
+	Ext:         "pdf",
+	Description: "Portable Document Format",
+	Signatures:  [][]byte{pdfHeader},
+	ScanFile:    ScanPDF,
 }
 
 var (

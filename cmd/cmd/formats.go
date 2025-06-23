@@ -20,19 +20,48 @@
 package cmd
 
 import (
+	"encoding/hex"
+	"fmt"
+	"os"
+	"strings"
+	"text/tabwriter"
+
+	"github.com/ostafen/digler/internal/format"
 	"github.com/spf13/cobra"
 )
 
-const AppName = "diglet"
+func DefineFormatsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "formats",
+		Short: "List all supported file formats",
+		Long: `The 'formats' command displays a table of all file formats currently supported by the recovery scanner.
+Each format includes its name, associated file extensions, category (e.g., image, document), and magic byte signatures used for detection.`,
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
+		RunE:         RunFormats,
+	}
+}
 
-func Execute() error {
-	rootCmd := &cobra.Command{
-		Use: AppName,
+func RunFormats(cmd *cobra.Command, args []string) error {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tDESC\tSIGNATURES")
+
+	headers, err := format.FileHeaders()
+	if err != nil {
+		return err
 	}
 
-	rootCmd.AddCommand(DefineScanCommand())
-	rootCmd.AddCommand(DefineMountCommand())
-	rootCmd.AddCommand(DefineFormatsCommand())
+	for _, hdr := range headers {
+		signatures := make([]string, len(hdr.Signatures))
+		for i, sig := range hdr.Signatures {
+			signatures[i] = hex.EncodeToString(sig)
+		}
 
-	return rootCmd.Execute()
+		fmt.Fprintf(w, "%s\t%s\t%s\n",
+			hdr.Ext,
+			hdr.Description,
+			strings.Join(signatures, ","),
+		)
+	}
+	return w.Flush()
 }

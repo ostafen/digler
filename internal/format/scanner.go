@@ -20,23 +20,23 @@
 package format
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 
 	"github.com/ostafen/digler/pkg/pbar"
+	"github.com/ostafen/digler/pkg/reader"
 )
 
 type Scanner struct {
-	headers   []FileHeader
-	blockSize int
+	blockSize   int
+	maxFileSize uint64
+	buf         []byte
 
-	buf    []byte
-	r      *FileRegistry
-	logger *slog.Logger
+	r         *FileRegistry
+	logger    *slog.Logger
+	bufReader *reader.BufferedReadSeeker
 }
 
 type FileInfo struct {
@@ -46,18 +46,21 @@ type FileInfo struct {
 	Size   uint64 // Size of the format in bytes
 }
 
-func NewScanner(logger *slog.Logger, r *FileRegistry, bufferSize, blockSize int) *Scanner {
+func NewScanner(
+	logger *slog.Logger,
+	r *FileRegistry,
+	bufferSize,
+	blockSize int,
+	maxFileSize uint64,
+) *Scanner {
 	return &Scanner{
-		headers:   fileHeaders,
-		blockSize: blockSize,
-		buf:       make([]byte, roundToMul(bufferSize, int(blockSize))),
-		r:         r,
-		logger:    logger,
+		blockSize:   blockSize,
+		maxFileSize: maxFileSize,
+		buf:         make([]byte, roundToMul(bufferSize, int(blockSize))),
+		r:           r,
+		logger:      logger,
+		bufReader:   reader.NewBufferedReadSeeker(nil, 4096),
 	}
-}
-
-func (sc *Scanner) AddHeader(header FileHeader) {
-	sc.headers = append(sc.headers, header)
 }
 
 func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bool) {
@@ -76,6 +79,8 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 
 			n = roundToMul(n, sc.blockSize) / sc.blockSize
 
+			nextBlockOffset := blockOffset + uint64(len(sc.buf))
+
 			sc.scanBuffer(n, func(blockIdx int, hdr FileHeader) uint64 {
 				globalBlock := blockOffset/uint64(sc.blockSize) + uint64(blockIdx)
 				globalOffset := globalBlock * uint64(sc.blockSize)
@@ -84,20 +89,38 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 				pb.FilesFound = filesFound
 				pb.Render(false)
 
-				fileReader := NewReader(
-					bufio.NewReader(
-						io.MultiReader(
-							bytes.NewReader(sc.buf[blockIdx*sc.blockSize:n*sc.blockSize]),
-							io.NewSectionReader(
-								r,
-								int64(blockOffset)+int64(len(sc.buf)),
-								math.MaxInt64,
-							),
-						),
-					),
+				bufData := sc.buf[blockIdx*sc.blockSize : n*sc.blockSize]
+
+				remainingSize := max(
+					int64(size)-(int64(blockOffset)+int64(len(sc.buf))),
+					0,
 				)
 
-				res, err := hdr.ScanFile(fileReader)
+				mr := reader.NewMultiReadSeeker(
+					[]io.ReadSeeker{
+						bytes.NewReader(bufData),
+						io.NewSectionReader(
+							r,
+							int64(blockOffset)+int64(len(sc.buf)),
+							remainingSize,
+						),
+					},
+					[]int64{int64(len(bufData)), remainingSize},
+				)
+
+				sc.bufReader.Reset(mr)
+
+				maxSize := min(
+					sc.maxFileSize,
+					uint64(len(bufData))+uint64(remainingSize),
+				)
+
+				r := NewReader(
+					sc.bufReader,
+					maxSize,
+				)
+
+				res, err := hdr.ScanFile(r)
 				if err != nil {
 					return 0
 				}
@@ -112,12 +135,17 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 				stop = !yield(finfo)
 
 				filesFound++
+
+				nextBlockOffset = max(
+					nextBlockOffset,
+					roundToMul(globalOffset+res.Size, uint64(sc.blockSize)),
+				)
 				return res.Size
 			})
 			if err == io.EOF {
 				break
 			}
-			blockOffset += uint64(len(sc.buf))
+			blockOffset = nextBlockOffset
 		}
 
 		pb.ProcessedBytes = int64(size)
@@ -144,7 +172,7 @@ func (sc *Scanner) scanBuffer(n int, scanFile func(blockIdx int, hdr FileHeader)
 	}
 }
 
-func roundToMul(n, m int) int {
+func roundToMul[T int | int64 | uint64](n, m T) T {
 	k := (n + m - 1) / m
 	return k * m
 }

@@ -21,7 +21,7 @@ package env
 
 var (
 	AppName    = "digler"
-	Version    = "dev" // Default to "dev" if not set by build flags
+	Version    = "dev"
 	CommitHash = "none"
 	BuildTime  = "unknown"
 )

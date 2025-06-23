@@ -26,7 +26,8 @@ import (
 )
 
 var wavFileHeader = FileHeader{
-	Ext: "wav",
+	Ext:         "wav",
+	Description: "Waveform Audio File Format",
 	Signatures: [][]byte{
 		[]byte("RIFF"),
 		[]byte("RIFX"),

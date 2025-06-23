@@ -19,18 +19,23 @@
 // THE SOFTWARE.
 package format
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"unicode"
+)
+
+const (
+	_  = iota // ignore first value
+	KB = 1 << (10 * iota)
+	MB
+	GB
+	TB
+)
 
 // Helper to format bytes into human-readable units, avoiding .00 for whole numbers
 func FormatBytes(b int64) string {
-	const (
-		_  = iota // ignore first value
-		KB = 1 << (10 * iota)
-		MB
-		GB
-		TB
-	)
-
 	val := float64(b)
 	var unit string
 
@@ -56,4 +61,45 @@ func FormatBytes(b int64) string {
 		return fmt.Sprintf("%.0f%s", val, unit)
 	}
 	return fmt.Sprintf("%.2f%s", val, unit)
+}
+
+// ParseBytes converts a human-readable byte size string (e.g., "10MB", "1.5GB", "2048")
+// into its corresponding int64 value in bytes. If no unit is specified, bytes are assumed.
+func ParseBytes(s string) (uint64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty input")
+	}
+
+	var i int
+	for i = 0; i < len(s); i++ {
+		if !unicode.IsDigit(rune(s[i])) && s[i] != '.' {
+			break
+		}
+	}
+
+	numStr := s[:i]
+	unitStr := strings.ToUpper(strings.TrimSpace(s[i:]))
+
+	num, err := strconv.ParseFloat(numStr, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid number: %v", err)
+	}
+
+	var multiplier int64 = 1
+	switch unitStr {
+	case "", "B":
+		multiplier = 1
+	case "KB":
+		multiplier = KB
+	case "MB":
+		multiplier = MB
+	case "GB":
+		multiplier = GB
+	case "TB":
+		multiplier = TB
+	default:
+		return 0, fmt.Errorf("unknown unit: %s", unitStr)
+	}
+	return uint64(num * float64(multiplier)), nil
 }

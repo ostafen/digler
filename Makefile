@@ -6,7 +6,7 @@ MODULE := $(shell go list -m)
 ENV_PKG = $(MODULE)/internal/env
 
 # Target platforms: os/arch
-TARGETS = linux/amd64 linux/arm64 darwin/amd64 windows/amd64
+TARGETS = linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
 # Get the latest tag (if any)
 TAG := $(shell git describe --tags --exact-match 2>/dev/null || echo "")

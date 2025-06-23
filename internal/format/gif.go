@@ -21,7 +21,8 @@ import (
 )
 
 var gifFileHeader = FileHeader{
-	Ext: "gif",
+	Ext:         "gif",
+	Description: "Graphics Interchange Format",
 	Signatures: [][]byte{
 		[]byte("GIF87a"),
 		[]byte("GIF89a"),

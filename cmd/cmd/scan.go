@@ -25,13 +25,14 @@ import (
 
 	"github.com/ostafen/digler/internal/disk"
 	"github.com/ostafen/digler/internal/scan"
+	"github.com/ostafen/digler/pkg/util/format"
 	"github.com/spf13/cobra"
 )
 
 func DefineScanCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "scan <device>",
-		Short:        "List files in a vault layer",
+		Short:        "Scan an image file or disk",
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE:         RunScan,
@@ -39,9 +40,11 @@ func DefineScanCommand() *cobra.Command {
 
 	cmd.Flags().StringP("dump", "d", "", "dump the found files to the specified directory")
 	cmd.Flags().Uint64("block-size", 0, "enforce a specific block size during scanning")
-	cmd.Flags().Uint64("scan-buffer-size", 4*1024*1024, "the size of the scan buffer")
-	cmd.Flags().Uint64("max-scan-size", math.MaxUint64, "max number of bytes to scan")
+	cmd.Flags().String("scan-buffer-size", "4MB", "the size of the scan buffer")
+	cmd.Flags().String("max-scan-size", "", "max number of bytes to scan")
+	cmd.Flags().String("max-file-size", "4GB", "maximum size of a carved file")
 	cmd.Flags().Bool("no-log", false, "disable logging")
+	cmd.Flags().StringSliceP("ext", "", nil, "file extensions to parse")
 	cmd.Flags().StringP("output", "o", "", "The path of the scan index file")
 	return cmd
 }
@@ -57,9 +60,13 @@ func parseOptions(cmd *cobra.Command) scan.Options {
 	dumpDir := cmd.Flag("dump").Value.String()
 	disableLog, _ := cmd.Flags().GetBool("no-log")
 	outputFile, _ := cmd.Flags().GetString("output")
-	scanBufferSize, _ := cmd.Flags().GetUint64("scan-buffer-size")
-	blockSize, _ := cmd.Flags().GetUint64("block-size")
-	maxScanSize, _ := cmd.Flags().GetUint64("max-scan-size")
+
+	scanBufferSize := getBytes(cmd, "scan-buffer-size")
+	blockSize := getBytes(cmd, "block-size")
+	maxScanSize := getBytes(cmd, "max-scan-size")
+	maxFileSize := getBytes(cmd, "max-file-size")
+
+	fileExt, _ := cmd.Flags().GetStringSlice("ext")
 	logLevel, _ := cmd.Flags().GetString("log-level")
 
 	return scan.Options{
@@ -68,9 +75,21 @@ func parseOptions(cmd *cobra.Command) scan.Options {
 		BlockSize:      blockSize,
 		MaxScanSize:    maxScanSize,
 		ScanBufferSize: scanBufferSize,
+		MaxFileSize:    maxFileSize,
 		DisableLog:     disableLog,
+		FileExt:        fileExt,
 		LogLevel:       slogLevel(logLevel),
 	}
+}
+
+func getBytes(cmd *cobra.Command, name string) uint64 {
+	s, _ := cmd.Flags().GetString(name)
+
+	v, err := format.ParseBytes(s)
+	if err != nil {
+		return math.MaxUint64
+	}
+	return v
 }
 
 func slogLevel(level string) slog.Level {

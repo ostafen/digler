@@ -21,7 +21,8 @@ import (
 )
 
 var jpegFileHeader = FileHeader{
-	Ext: "jpeg",
+	Ext:         "jpeg",
+	Description: "Joint Photographic Experts Group Format",
 	Signatures: [][]byte{
 		{0xFF, 0xD8, 0xFF},
 	},

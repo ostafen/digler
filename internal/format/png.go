@@ -23,9 +23,10 @@ import (
 )
 
 var pngFileHeader = FileHeader{
-	Ext:        "png",
-	Signatures: [][]byte{[]byte(pngHeader)},
-	ScanFile:   ScanPNG,
+	Ext:         "png",
+	Description: "Portable Network Graphics Format",
+	Signatures:  [][]byte{[]byte(pngHeader)},
+	ScanFile:    ScanPNG,
 }
 
 var ErrChunkOrderError = fmt.Errorf("invalid PNG chunk order")

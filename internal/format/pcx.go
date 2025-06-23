@@ -28,7 +28,8 @@ import (
 )
 
 var pcxFileHeader = FileHeader{
-	Ext: "pcx",
+	Ext:         "pcx",
+	Description: "Picture Exchange Format",
 	Signatures: [][]byte{
 		{0x0A},
 	},
