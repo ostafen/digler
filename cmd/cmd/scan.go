@@ -20,10 +20,10 @@
 package cmd
 
 import (
-	"log/slog"
 	"math"
 
 	"github.com/ostafen/digler/internal/disk"
+	"github.com/ostafen/digler/internal/logger"
 	"github.com/ostafen/digler/internal/scan"
 	"github.com/ostafen/digler/pkg/util/format"
 	"github.com/spf13/cobra"
@@ -78,7 +78,7 @@ func parseOptions(cmd *cobra.Command) scan.Options {
 		MaxFileSize:    maxFileSize,
 		DisableLog:     disableLog,
 		FileExt:        fileExt,
-		LogLevel:       slogLevel(logLevel),
+		LogLevel:       logger.ParseLevel(logLevel),
 	}
 }
 
@@ -90,18 +90,4 @@ func getBytes(cmd *cobra.Command, name string) uint64 {
 		return math.MaxUint64
 	}
 	return v
-}
-
-func slogLevel(level string) slog.Level {
-	switch level {
-	case "INFO":
-		return slog.LevelInfo
-	case "DEBUG":
-		return slog.LevelDebug
-	case "WARN":
-		return slog.LevelWarn
-	case "ERROR":
-		return slog.LevelError
-	}
-	return slog.LevelInfo
 }
