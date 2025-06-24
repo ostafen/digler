@@ -4,6 +4,10 @@
 <h2 align="center">Digler - Go Deep. Get Back Your Data</h2>
 
 <p align="center">
+  ⚠️ <strong>Note:</strong> Digler is in early development (v0.0.1). Some bugs may exist. Please report issues!
+</p>
+
+<p align="center">
   <a href="https://github.com/ostafen/digler/actions/workflows/build.yml">
     <img src="https://github.com/ostafen/digler/actions/workflows/build.yml/badge.svg" alt="Build Status">
   </a>
@@ -11,7 +15,12 @@
 
 ## Why Digler?
 
-While many data recovery tools exist, there wasn’t yet a solution written in Go—a language well-suited for building fast, reliable, and maintainable software. Digler fills that gap by offering a simple, efficient, and cross-platform alternative focused on deep disk analysis and recovery.
+While many data recovery tools exist, few offer a combination of simplicity, flexibility, and modern design focused on deep disk analysis and effective file carving.
+
+Digler was created to fill this gap by providing a streamlined, reliable command-line tool that makes data recovery easier and more efficient—without the complexity of heavyweight GUIs or fragmented workflows.
+
+Built in Go, Digler leverages the language’s strengths in performance, cross-platform support, and maintainability to deliver a fast and dependable solution for today’s data recovery challenges.
+
 
 ## Features
 
@@ -19,12 +28,11 @@ While many data recovery tools exist, there wasn’t yet a solution written in G
 
 * **File System Agnostic Analysis**: Recover deleted files regardless of the underlying file system (e.g., NTFS, FAT32, ext4), even when metadata is lost.
 
+* **Reporting Capabilities**: Generate detailed reports, compliant with the `Digital Forensics XML (DFXML)` format, of recovered data and analysis findings.
+
 * **Post-Scan Data Recovery**: Utilize the generated DFXML reports to precisely recover deleted or fragmented files.
 
 * **Intuitive Command-Line Interface**:  A user-friendly CLI designed for efficiency and ease of use.
-
-* **Reporting Capabilities**: Generate detailed reports, compliant with the `Digital Forensics XML (DFXML)` format, of recovered data and analysis findings.
-
 
 ---
 
@@ -94,14 +102,31 @@ Example:
 foo@bar$ digler recover dfrws-2006-challenge.raw report.xml --dir ./recover
 ```
 
+### Test Datasets
+
+To help you get started with real-world testing and evaluation, here are some publicly available disk image datasets commonly used in digital forensics research:
+
+- **DFRWS Forensic Challenge Images**
+  [DFRWS 2006 Challenge](https://www.dropbox.com/scl/fi/il7qier2mg7azy13znmvc/dfrws-2006-challenge.zip?rlkey=iueltr1kelpcbdhctnabt2gfn&e=1&dl=0) — a classic forensic image used for recovery challenges and benchmarking.
+
+- **Digital Corpora**
+  [Digital Corpora Repository](https://digitalcorpora.org/) — a rich collection of forensic datasets including disk images, memory dumps, and more.
+
+- **National Institute of Standards and Technology (NIST) Datasets**
+  [NIST Computer Forensics Reference Data Sets (CFReDS)](https://www.cfreds.nist.gov/) — a wide variety of forensic datasets for research and tool evaluation.
+
+You can download these images and use Digler’s `scan` and `recover` commands to experiment and validate your setup.
+
+
 ### Supported File Types
 
-Digler allows for the recovery of lost or deleted files based on their unique headers and footers, even when file system metadata is corrupted or missing. Below is a list of all currently supported file formats:
+Even in its early stages, Digler is already capable of recovering a wide range of file types, including documents, images, audio, and archives.
 
-- **Documents**: docx, xlsx, pdf
-- **Images**: jpg, png, gif, bmp, tiff, raw
-- **Audio**: mp3, wav, flac
-- **Archives**: zip
+To see the complete list of supported formats, run:
+
+```bash
+foo@bar$ digler formats
+```
 
 ## Contributing
 
@@ -112,14 +137,16 @@ We welcome contributions of all kinds, especially in areas like:
 - Implementing new file format decoders
 - Improving existing carving heuristics
 - Optimizing performance
-- Enhancing the CLI or UX
+- Enhancing the CLI interface
 - Writing tests, docs, or usage examples
 
 Whether you're familiar with Go or just interested in digital forensics, your help is appreciated.
 
 ### Getting Started
 
-Before you start, **please open an issue** to discuss your idea or planned changes. This helps avoid duplicate work and keeps development aligned.
+Before you start, **please open an issue** (or pick an existing one) to discuss your idea or planned changes. This helps avoid duplicate work and keeps development aligned.
+
+**Please read our [Code of Conduct](CODE_OF_CONDUCT.md) before getting started.**
 
 Once you're ready, fork the repository and submit your pull request!
 

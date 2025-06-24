@@ -46,4 +46,6 @@ func PrintLogo() {
 	fmt.Printf("Commit:    %s\n", env.CommitHash)
 	fmt.Printf("Build Time: %s\n", env.BuildTime)
 	fmt.Println(" ")
+	fmt.Println("© 2025 Stefano Scafiti. Licensed under MIT License.")
+	fmt.Println(" ")
 }
