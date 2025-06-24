@@ -139,8 +139,9 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		return err
 	}
 
+	var pluginScanners []format.FileScanner
 	if len(opts.Plugins) > 0 {
-		pluginScanners, err := format.LoadPlugins(opts.Plugins...)
+		pluginScanners, err = format.LoadPlugins(opts.Plugins...)
 		if err != nil {
 			return err
 		}
@@ -165,6 +166,12 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 	logger.Info("Starting scanning operation...")
 	logger.Infof("Source: \t%s", absPath(filePath))
 	logger.Infof("File Types: \t%s", strings.Join(fileExts, ","))
+
+	if len(pluginScanners) > 0 {
+		logger.Infof("Loaded %d plugins(s): \t%s", len(pluginScanners), strings.Join(opts.Plugins, ","))
+	} else {
+		logger.Infof("No plugin loaded")
+	}
 
 	if opts.DumpDir != "" {
 		logger.Infof("Destination: \t%s", absPath(opts.DumpDir))
