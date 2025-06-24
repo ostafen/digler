@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'  # Or your project's Go version
+          go-version: '1.23'
 
       - name: Configure Git
         run: |
