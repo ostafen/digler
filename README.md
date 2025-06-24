@@ -13,6 +13,10 @@
   </a>
 </p>
 
+<p align="center">
+  <img alt="Digler Demo" src="assets/demo.gif" width="600px">
+</p>
+
 ## Why Digler?
 
 While many data recovery tools exist, few offer a combination of simplicity, flexibility, and modern design focused on deep disk analysis and effective file carving.
