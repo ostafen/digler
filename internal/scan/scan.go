@@ -90,11 +90,11 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		return err
 	}
 
-	session := GenSessionID()
+	scanID := GetScanID()
 
 	var reportFileName string
 	if opts.ReportFile == "" {
-		reportFileName = fmt.Sprintf("report_%s.xml", session)
+		reportFileName = fmt.Sprintf("report_%s.xml", scanID)
 	}
 
 	outFile, err := os.Create(reportFileName)
@@ -131,7 +131,7 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 
 	var logFilePath string
 	if !opts.DisableLog {
-		logFilePath = absPath(filepath.Join(opts.DumpDir, session) + ".log")
+		logFilePath = absPath(filepath.Join(opts.DumpDir, scanID) + ".log")
 	}
 
 	scanners, err := format.GetFileScanners(opts.FileExt...)
@@ -209,11 +209,8 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		totalDataSize += finfo.Size
 
 		if opts.DumpDir != "" {
-			fileReader := io.NewSectionReader(r, int64(finfo.Offset), int64(finfo.Size))
-
-			err := ioutil.CopyFile(filepath.Join(opts.DumpDir, finfo.Name), fileReader)
-			if err != nil {
-				return err
+			if err := DumpFile(r, opts.DumpDir, &finfo); err != nil {
+				logger.Errorf("unable to dump file %s: %s", finfo.Name, err)
 			}
 		}
 
@@ -245,6 +242,12 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 	return nil
 }
 
+func DumpFile(r io.ReaderAt, outDir string, finfo *format.FileInfo) error {
+	fileReader := io.NewSectionReader(r, int64(finfo.Offset), int64(finfo.Size))
+
+	return ioutil.CopyFile(filepath.Join(outDir, finfo.Name), fileReader)
+}
+
 func DiscoverPartitions(path string) ([]disk.Partition, error) {
 	imgFile, err := fs.Open(path)
 	if err != nil {
@@ -269,9 +272,6 @@ func DiscoverPartitions(path string) ([]disk.Partition, error) {
 			return mbrPartitions, nil
 		}
 	}
-
-	// TODO: if was unable to determine the partitions,
-	// Maybe, try to locate partition boundaries using FAT signature, etc?
 
 	finfo, err := imgFile.Stat()
 	if err != nil {
@@ -344,9 +344,9 @@ func GetMBRPartitions(imgFile fs.File, mbr *disk.MBR) ([]disk.Partition, error) 
 	return partitions, nil
 }
 
-// GenSessionID creates a unique file name for a scan session.
+// GetScanID creates a unique file name for a scan session.
 // The format is "scan_YYYYMMDD_HHMMSS".
-func GenSessionID() string {
+func GetScanID() string {
 	now := time.Now()
 
 	// Format the time as YYYYMMDD_HHMMSS
