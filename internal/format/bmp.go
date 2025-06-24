@@ -81,7 +81,7 @@ func ScanBMP(r *Reader) (*ScanResult, error) {
 	var bmpHeader BMPHeader
 	var dibHeader DIBHeader
 
-	// 1. Read the BMP File Header (14 bytes)
+	// Read the BMP File Header (14 bytes)
 	err := binary.Read(r, binary.LittleEndian, &bmpHeader)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -104,7 +104,7 @@ func ScanBMP(r *Reader) (*ScanResult, error) {
 		return nil, errors.New("invalid BMP header: data offset is before the BMP file header")
 	}
 
-	// 2. Read the DIB Header (assume BITMAPINFOHEADER for commonality, 40 bytes)
+	// Read the DIB Header (assume BITMAPINFOHEADER for commonality, 40 bytes)
 	// We need to peek at the HeaderSize field to determine the exact DIB header type.
 	// For simplicity, we'll assume BITMAPINFOHEADER (40 bytes) and then read it.
 	// A more robust solution might read only the HeaderSize first, then seek/read the rest.
@@ -121,7 +121,7 @@ func ScanBMP(r *Reader) (*ScanResult, error) {
 	}
 	dibHeader.HeaderSize = binary.LittleEndian.Uint32(buf[:])
 
-	// More robust validation of DIB Header fields
+	// Validate DIB Header fields
 	if dibHeader.HeaderSize != 40 &&
 		dibHeader.HeaderSize != 12 && // BITMAPCOREHEADER
 		dibHeader.HeaderSize != 64 && // BITMAPINFOHEADER V2
@@ -130,8 +130,7 @@ func ScanBMP(r *Reader) (*ScanResult, error) {
 		return nil, fmt.Errorf("unsupported DIB header size: %d", dibHeader.HeaderSize)
 	}
 
-	// Now read the rest of the DIBHeader based on its size
-	// We've already read the first 4 bytes (HeaderSize), so adjust the read length.
+	// Read the rest of the DIBHeader based on its size
 	n, err = r.Read(buf[4:dibHeader.HeaderSize])
 	if err != nil {
 		if errors.Is(err, io.EOF) {

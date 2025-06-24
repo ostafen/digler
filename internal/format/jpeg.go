@@ -17,7 +17,6 @@ package format
 
 import (
 	"fmt"
-	"io"
 )
 
 var jpegFileHeader = FileHeader{
@@ -49,11 +48,6 @@ const (
 	app14Marker = 0xee
 	app15Marker = 0xef
 )
-
-func discard(n int, r io.Reader) error {
-	_, err := io.CopyN(io.Discard, r, int64(n))
-	return err
-}
 
 // ScanJPEG attempts to validate a JPEG file from the beginning of the 'data'
 // buffer and determine its total size. This function is adapted from the
@@ -158,10 +152,10 @@ func ScanJPEG(r *Reader) (*ScanResult, error) {
 		case sof0Marker, sof1Marker, sof2Marker,
 			dhtMarker, dqtMarker, sosMarker,
 			driMarker, app0Marker, app14Marker:
-			err = discard(n, r)
+			_, err = r.Discard(n)
 		default:
 			if app0Marker <= marker && marker <= app15Marker || marker == comMarker {
-				err = discard(n, r)
+				_, err = r.Discard(n)
 			} else if marker < 0xc0 { // See Table B.1 "Marker code assignments".
 				err = fmt.Errorf("unknown marker")
 			} else {
