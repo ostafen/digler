@@ -22,6 +22,8 @@ package disk
 import (
 	"encoding/binary"
 	"fmt"
+
+	fmtutils "github.com/ostafen/digler/pkg/util/format"
 )
 
 // MBRPartitionEntry represents a single 16-byte entry in the MBR's partition table.
@@ -62,7 +64,7 @@ func (p *MBRPartitionEntry) String() string {
 		p.ReadStartLBA(),
 		p.ReadTotalSectors(),
 		p.ReadTotalSectors()*512, // Assuming 512 bytes per sector
-		formatBytes(uint64(p.ReadTotalSectors())*512))
+		fmtutils.FormatBytes(int64(p.ReadTotalSectors())*512))
 }
 
 // MBR represents the Master Boot Record structure.
@@ -200,27 +202,5 @@ func getPartitionTypeName(id MBRPartition) string {
 		return "EFI System Partition"
 	default:
 		return "Unknown"
-	}
-}
-
-func formatBytes(b uint64) string {
-	const (
-		_  = iota             // 0
-		KB = 1 << (10 * iota) // 1 << 10 (1024)
-		MB = 1 << (10 * iota) // 1 << 20 (1024 * 1024)
-		GB = 1 << (10 * iota) // 1 << 30 (1024 * 1024 * 1024)
-		TB = 1 << (10 * iota) // 1 << 40 (1024 * 1024 * 1024 * 1024)
-	)
-	switch {
-	case b >= TB:
-		return fmt.Sprintf("%.2f TB", float64(b)/float64(TB))
-	case b >= GB:
-		return fmt.Sprintf("%.2f GB", float64(b)/float64(GB))
-	case b >= MB:
-		return fmt.Sprintf("%.2f MB", float64(b)/float64(MB))
-	case b >= KB:
-		return fmt.Sprintf("%.2f KB", float64(b)/float64(KB))
-	default: // Handle bytes less than 1KB
-		return fmt.Sprintf("%d B", b)
 	}
 }

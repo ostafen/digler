@@ -22,7 +22,6 @@ package format
 import (
 	"fmt"
 	"plugin"
-	"reflect"
 )
 
 type ScanResult struct {
@@ -117,7 +116,6 @@ func loadPlugin(path string) (FileScanner, error) {
 		return nil, fmt.Errorf("plugin %s does not export FileScanner symbol: %w", path, err)
 	}
 
-	fmt.Println(reflect.TypeOf(symScanner))
 	getScanner, ok := symScanner.(func() (FileScanner, error))
 	if !ok {
 		return nil, fmt.Errorf("plugin %s GetScanner has wrong type", path)

@@ -23,8 +23,6 @@
 package fuse
 
 import (
-	"errors"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -34,10 +32,11 @@ import (
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
 	"github.com/ostafen/digler/internal/format"
+	osutils "github.com/ostafen/digler/pkg/util/os"
 )
 
 func Mount(mountpoint string, r io.ReaderAt, finfos []format.FileInfo) error {
-	created, err := PrepareMountpoint(mountpoint)
+	created, err := osutils.EnsureDir(mountpoint, true)
 	if err != nil {
 		return err
 	}
@@ -103,58 +102,4 @@ func waitForUmount(mountpoint string) error {
 		log.Printf("Unmount failed: %v. Remaining retries: %d. Waiting for another signal to retry...", err, maxUnmountRetries-unmountAttempts)
 	}
 	return nil
-}
-
-// PrepareMountpoint ensures the given path is a valid, empty directory suitable for FUSE mounting.
-// It creates the directory if it doesn't exist. Returns `true` if created, `false` otherwise,
-// or an error if the path exists but isn't an empty directory.
-func PrepareMountpoint(mountpoint string) (bool, error) {
-	finfo, err := os.Stat(mountpoint)
-	if errors.Is(err, os.ErrNotExist) {
-		err := os.Mkdir(mountpoint, 0755)
-		if err != nil {
-			return false, fmt.Errorf("failed to create mountpoint %s: %w", mountpoint, err)
-		}
-		return true, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("failed to stat mountpoint %s: %w", mountpoint, err)
-	}
-
-	if !finfo.IsDir() {
-		return false, fmt.Errorf("mountpoint %s is not a directory", mountpoint)
-	}
-
-	empty, err := IsDirEmpty(mountpoint)
-	if err != nil {
-		return false, fmt.Errorf("failed to check if mountpoint %s is empty: %w", mountpoint, err)
-	}
-
-	if !empty {
-		return false, fmt.Errorf("mountpoint %s is not empty", mountpoint)
-	}
-	return false, nil
-}
-
-// IsDirEmpty returns true if the directory at path is empty, false otherwise.
-// Returns an error if the path does not exist or is not a directory.
-func IsDirEmpty(path string) (bool, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return false, err
-	}
-	defer f.Close()
-
-	entries, err := f.Readdir(1)
-	if err != nil {
-		if err == io.EOF {
-			return true, nil
-		}
-		return false, err
-	}
-
-	if len(entries) > 0 {
-		return false, nil
-	}
-	return true, nil
 }

@@ -31,6 +31,7 @@ func Execute() error {
 	}
 
 	rootCmd.AddCommand(DefineScanCommand())
+	rootCmd.AddCommand(DefineRecoverCommand())
 	rootCmd.AddCommand(DefineMountCommand())
 	rootCmd.AddCommand(DefineFormatsCommand())
 

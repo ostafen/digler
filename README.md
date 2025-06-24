@@ -17,7 +17,7 @@
 
 While many data recovery tools exist, few offer a combination of simplicity, flexibility, and modern design focused on deep disk analysis and effective file carving.
 
-Digler was created to fill this gap by providing a streamlined, reliable command-line tool that makes data recovery easier and more efficient—without the complexity of heavyweight GUIs or fragmented workflows.
+Digler was created to fill this gap by providing a streamlined, plugin-extensible command-line tool that makes data recovery easier and more efficient without the complexity of heavyweight GUIs or fragmented workflows.
 
 Built in Go, Digler leverages the language’s strengths in performance, cross-platform support, and maintainability to deliver a fast and dependable solution for today’s data recovery challenges.
 
@@ -28,9 +28,11 @@ Built in Go, Digler leverages the language’s strengths in performance, cross-p
 
 * **File System Agnostic Analysis**: Recover deleted files regardless of the underlying file system (e.g., NTFS, FAT32, ext4), even when metadata is lost.
 
+* **Plugin-Based Extensibility**: Support for custom file scanners through plugins, simplifying integration with new file formats.
+
 * **Reporting Capabilities**: Generate detailed reports, compliant with the `Digital Forensics XML (DFXML)` format, of recovered data and analysis findings.
 
-* **Post-Scan Data Recovery**: Utilize the generated DFXML reports to precisely recover deleted or fragmented files.
+* **Post-Scan Data Recovery**: Utilize the generated DFXML reports to precisely recover specific files.
 
 * **Intuitive Command-Line Interface**:  A user-friendly CLI designed for efficiency and ease of use.
 
