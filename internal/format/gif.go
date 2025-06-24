@@ -17,7 +17,6 @@ package format
 import (
 	"errors"
 	"fmt"
-	"io"
 )
 
 var gifFileHeader = FileHeader{
@@ -55,7 +54,7 @@ const (
 
 type gifDecoder struct {
 	loopCount int
-	r         io.Reader
+	r         *Reader
 
 	width, height       int
 	imageFields         byte
@@ -77,7 +76,7 @@ func ScanGIF(r *Reader) (*ScanResult, error) {
 	}
 
 	for {
-		c, err := readByte(d.r.(io.ByteReader))
+		c, err := d.r.ReadByte()
 		if err != nil {
 			return nil, fmt.Errorf("gif: reading frames: %v", err)
 		}
@@ -108,7 +107,7 @@ func ScanGIF(r *Reader) (*ScanResult, error) {
 }
 
 func (d *gifDecoder) readExtension() error {
-	extension, err := readByte(d.r.(io.ByteReader))
+	extension, err := d.r.ReadByte()
 	if err != nil {
 		return fmt.Errorf("gif: reading extension: %v", err)
 	}
@@ -121,7 +120,7 @@ func (d *gifDecoder) readExtension() error {
 	case eComment:
 		// nothing to do but read the data.
 	case eApplication:
-		b, err := readByte(d.r.(io.ByteReader))
+		b, err := d.r.ReadByte()
 		if err != nil {
 			return fmt.Errorf("gif: reading extension: %v", err)
 		}
@@ -131,7 +130,7 @@ func (d *gifDecoder) readExtension() error {
 		return fmt.Errorf("gif: unknown extension 0x%.2x", extension)
 	}
 	if size > 0 {
-		if err := readFull(d.r, d.tmp[:size]); err != nil {
+		if _, err := d.r.Read(d.tmp[:size]); err != nil {
 			return fmt.Errorf("gif: reading extension: %v", err)
 		}
 	}
@@ -162,7 +161,7 @@ func (d *gifDecoder) readExtension() error {
 }
 
 func (d *gifDecoder) readGraphicControl() error {
-	if err := readFull(d.r, d.tmp[:6]); err != nil {
+	if _, err := d.r.Read(d.tmp[:6]); err != nil {
 		return fmt.Errorf("gif: can't read graphic control: %s", err)
 	}
 	if d.tmp[0] != 4 {
@@ -175,7 +174,7 @@ func (d *gifDecoder) readGraphicControl() error {
 }
 
 func (d *gifDecoder) parseImageDescriptorBounds() error {
-	if err := readFull(d.r, d.tmp[:9]); err != nil {
+	if _, err := d.r.Read(d.tmp[:9]); err != nil {
 		return fmt.Errorf("gif: can't read image descriptor: %s", err)
 	}
 	left := int(d.tmp[0]) + int(d.tmp[1])<<8
@@ -220,7 +219,7 @@ func (d *gifDecoder) readImageDescriptor() error {
 		return errors.New("gif: no color table")
 	}
 
-	litWidth, err := readByte(d.r.(io.ByteReader))
+	litWidth, err := d.r.ReadByte()
 	if err != nil {
 		return fmt.Errorf("gif: reading image data: %v", err)
 	}
@@ -230,7 +229,7 @@ func (d *gifDecoder) readImageDescriptor() error {
 
 	// discard LZW encoded blocks
 	for {
-		size, err := readByte(d.r.(io.ByteReader)) // read LZW minimum code size
+		size, err := d.r.ReadByte() // read LZW minimum code size
 		if err != nil {
 			return fmt.Errorf("gif: reading image data: %v", err)
 		}
@@ -238,7 +237,7 @@ func (d *gifDecoder) readImageDescriptor() error {
 			// 0 means end of LZW data.
 			break
 		}
-		if err := discard(int(size), d.r); err != nil {
+		if _, err := d.r.Discard(int(size)); err != nil {
 			return err
 		}
 	}
@@ -248,18 +247,18 @@ func (d *gifDecoder) readImageDescriptor() error {
 }
 
 func (d *gifDecoder) readBlock() (int, error) {
-	n, err := readByte(d.r.(io.ByteReader))
+	n, err := d.r.ReadByte()
 	if n == 0 || err != nil {
 		return 0, err
 	}
-	if err := readFull(d.r, d.tmp[:n]); err != nil {
+	if _, err := d.r.Read(d.tmp[:n]); err != nil {
 		return 0, err
 	}
 	return int(n), nil
 }
 
 func (d *gifDecoder) readHeaderAndScreenDescriptor() error {
-	err := readFull(d.r, d.tmp[:13])
+	_, err := d.r.Read(d.tmp[:13])
 	if err != nil {
 		return fmt.Errorf("gif: reading header: %v", err)
 	}
@@ -286,28 +285,9 @@ func (d *gifDecoder) readHeaderAndScreenDescriptor() error {
 
 func (d *gifDecoder) skipColorTable(fields byte) error {
 	n := 1 << (1 + uint(fields&fColorTableBitsMask))
-	err := readFull(d.r, d.tmp[:3*n])
+	_, err := d.r.Read(d.tmp[:3*n])
 	if err != nil {
 		return fmt.Errorf("gif: reading color table: %s", err)
 	}
 	return nil
-}
-
-func readByte(r io.ByteReader) (byte, error) {
-	b, err := r.ReadByte()
-	if err != nil {
-		if err == io.EOF {
-			return 0, io.ErrUnexpectedEOF
-		}
-		return 0, fmt.Errorf("gif: reading byte: %v", err)
-	}
-	return b, nil
-}
-
-func readFull(r io.Reader, b []byte) error {
-	_, err := io.ReadFull(r, b)
-	if err == io.EOF {
-		err = io.ErrUnexpectedEOF
-	}
-	return err
 }

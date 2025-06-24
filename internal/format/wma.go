@@ -76,7 +76,6 @@ const (
 	minGeneralSubObjectHeaderSize = 24
 
 	// minFilePropObjSize is the minimum expected size for an ASF File Properties Object.
-	// This is based on typical structure and checks in PhotoRec's C code (0x28 or 40 bytes).
 	minFilePropObjSize = 40
 
 	// filePropFileSizeOffset is the byte offset of the FileSize field within the ASF File Properties Object,
@@ -86,7 +85,6 @@ const (
 	filePropFileSizeOffset = 40
 
 	// minStreamPropObjSize is the minimum expected size for an ASF Stream Properties Object.
-	// Based on PhotoRec's C code (0x28 or 40 bytes).
 	minStreamPropObjSize = 40
 
 	// streamPropStreamTypeOffset is the byte offset of the StreamType GUID field within the ASF Stream Properties Object,
@@ -108,12 +106,12 @@ func ScanWMA(r *Reader) (*ScanResult, error) {
 		return nil, nil
 	}
 
-	// 2. Verify ASF Header Object GUID
+	// Verify ASF Header Object GUID
 	if !bytes.Equal(buf[:16], asfHeaderGUID) {
 		return nil, errors.New("ASF header GUID not found at buffer start")
 	}
 
-	// 3. Read critical fields from the ASF Header Object
+	// Read critical fields from the ASF Header Object
 	// ObjectSize (total size of this header object) is at offset 16.
 	headerObjectSize := binary.LittleEndian.Uint64(buf[16:24])
 	// NbrHeaderObj (number of top-level objects in the header section) is at offset 24.
@@ -128,7 +126,7 @@ func ScanWMA(r *Reader) (*ScanResult, error) {
 	var totalFileSize uint64  // This will store the definitive file size from File Properties Object
 	var isWMAStreamFound bool // Flag to indicate if a WMA stream type is found
 
-	// 4. Iterate through the header's sub-objects
+	// Iterate through the header's sub-objects
 	// `currentOffset` tracks the start of the current sub-object being parsed.
 
 	bytesRead := uint64(minASFHeaderObjSize) // Start after the initial ASF Header Object's fixed part
@@ -157,11 +155,6 @@ func ScanWMA(r *Reader) (*ScanResult, error) {
 			return nil, fmt.Errorf("invalid ASF internal object size: %d", objSize)
 		}
 
-		// Ensure the entire sub-object fits within the buffer. If not, the file is truncated.
-		//if currentOffset+objSize > bufLen {
-		//	return bufLen, nil // Return available length as per strict carving rules
-		//}
-
 		// Also ensure it fits within the main Header Object's declared bounds.
 		if bytesRead+objSize > headerObjectSize {
 			return nil, errors.New("malformed ASF header: sub-object extends beyond header boundary")
@@ -170,7 +163,7 @@ func ScanWMA(r *Reader) (*ScanResult, error) {
 		// Check for specific ASF object types
 		if bytes.Equal(objID, asfFilePropGUID) {
 			// Found the ASF File Properties Object
-			if objSize < minFilePropObjSize { // PhotoRec's C code check for min size 0x28 (40 bytes)
+			if objSize < minFilePropObjSize {
 				return nil, errors.New("invalid ASF File Properties Object size")
 			}
 
@@ -188,7 +181,6 @@ func ScanWMA(r *Reader) (*ScanResult, error) {
 
 			totalFileSize = binary.LittleEndian.Uint64(buf[16 : 16+8])
 
-			// PhotoRec C code checked `size < 30+104` (30 is minASFHeaderObjSize). This is a heuristic.
 			// Let's ensure the reported totalFileSize is at least big enough for the basic header.
 			if totalFileSize < headerObjectSize { // At least the size of the initial header block
 				return nil, errors.New("invalid total file size in File Properties Object")
@@ -199,7 +191,7 @@ func ScanWMA(r *Reader) (*ScanResult, error) {
 				return nil, err
 			}
 			// Found the ASF Stream Properties Object
-			if objSize < minStreamPropObjSize { // PhotoRec's C code check for min size 0x28 (40 bytes)
+			if objSize < minStreamPropObjSize {
 				return nil, errors.New("invalid ASF Stream Properties Object size")
 			}
 
@@ -225,16 +217,12 @@ func ScanWMA(r *Reader) (*ScanResult, error) {
 		bytesRead += objSize // Move to the start of the next sub-object
 	}
 
-	// 5. Final Validation and Return
-
 	// We need to have found a definitive total file size from the File Properties Object.
-
 	if totalFileSize == 0 {
 		return nil, errors.New("WMA file size not definitively determined from ASF structure")
 	}
 
-	// PhotoRec's C code also had a check: `if(size > 0 && size < offset_prop) return nil;`
-	// This means the declared total file size must be at least as large as the combined size of all header objects parsed.
+	// Declared total file size must be at least as large as the combined size of all header objects parsed.
 	if totalFileSize < bytesRead {
 		return nil, errors.New("inconsistent WMA file size: declared size is smaller than parsed header")
 	}

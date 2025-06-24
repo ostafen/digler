@@ -179,7 +179,7 @@ func ScanPCX(r *Reader) (*ScanResult, error) {
 	if header.Encoding == 0 { // Uncompressed
 		expectedImageDataSize := uint32(header.BytesPerLine) * uint32(header.NumPlanes) * height
 		// We've only read the header. Now, skip the image data.
-		skipped, err := io.CopyN(io.Discard, r, int64(expectedImageDataSize))
+		skipped, err := r.Discard(int(expectedImageDataSize))
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil, errors.New("unexpected EOF while skipping uncompressed image data")
