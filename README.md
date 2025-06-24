@@ -128,6 +128,44 @@ To see the complete list of supported formats, run:
 foo@bar$ digler formats
 ```
 
+## Adding Custom Scanners via Plugins
+
+Digler supports a plugin architecture that allows you to extend the tool with custom file scanners. This makes it easy to add support for new file formats or specialized carving logic without modifying the core code.
+
+### Plugin Interface
+Your plugin must implement the following interface:
+
+```golang
+type FileScanner interface {
+    Ext() string                  // Returns the file extension this scanner handles
+    Description() string          // A brief description of the file type
+    Signatures() [][]byte         // Byte signatures used to identify the file type
+    ScanFile(r *Reader) (*ScanResult, error) // Logic to scan and recover files from a Reader
+}
+```
+
+When your plugin is ready, place its source file in the plugins/ directory and compile all plugins by running:
+
+```bash
+foo@bar$ make plugins
+```
+
+This will build your plugin(s) as `.so` files and place them in the **bin/plugins/** folder, ready to be loaded by Digler.
+
+To verify that your plugins are correctly loaded, run:
+
+```bash
+foo@bar$ digler formats --plugins ./bin/plugins
+```
+
+This command will lists all supported file formats, including those provided by your custom plugins.
+
+Finally, use the same --plugins flag when scanning to enable your plugins:
+
+```bash
+foo@bar$ digler scan <image_or_device> --plugins ./bin/plugins
+```
+
 ## Contributing
 
 Writing a comprehensive file carver is a complex challenge. Each supported file type often requires a format-specific decoder to properly identify, validate, and reconstruct data. This makes the development of Digler both technically demanding and highly modular — the perfect scenario for open source collaboration.
@@ -150,6 +188,6 @@ Before you start, **please open an issue** (or pick an existing one) to discuss 
 
 Once you're ready, fork the repository and submit your pull request!
 
-### License
+## License
 
 Digler is released under the **MIT License**.

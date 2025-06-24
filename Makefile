@@ -45,6 +45,23 @@ build:
 		GOOS=$$GOOS GOARCH=$$GOARCH go build -ldflags "-X $(ENV_PKG).Version=$(VERSION) -X $(ENV_PKG).CommitHash=$(COMMIT_HASH) -X $(ENV_PKG).BuildTime=$(BUILD_TIME)" -o $(OUTPUT_DIR)/$$output_name $(MAIN_FILE); \
 	done
 
+# Default plugin source folder
+PLUGIN_SRC ?= plugins
+# Output folder for compiled plugins
+PLUGIN_OUT ?= bin/plugins
+
+# Ensure output folder exists before building
+$(PLUGIN_OUT):
+	mkdir -p $(PLUGIN_OUT)
+
+plugins: $(PLUGIN_OUT)
+	@echo "Building plugins from folder: $(PLUGIN_SRC) into $(PLUGIN_OUT)"
+	@for f in $(PLUGIN_SRC)/*.go; do \
+		plugin_name=$$(basename $$f .go); \
+		echo "Building plugin $$plugin_name.so"; \
+		go build -buildmode=plugin -o $(PLUGIN_OUT)/$$plugin_name.so $$f; \
+	done
+
 clean:
 	rm -rf $(OUTPUT_DIR)
 

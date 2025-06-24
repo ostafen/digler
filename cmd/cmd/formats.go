@@ -31,7 +31,7 @@ import (
 )
 
 func DefineFormatsCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "formats",
 		Short: "List all supported file formats",
 		Long: `The 'formats' command displays a table of all file formats currently supported by the recovery scanner.
@@ -40,26 +40,41 @@ Each format includes its name, associated file extensions, category (e.g., image
 		SilenceUsage: true,
 		RunE:         RunFormats,
 	}
+
+	cmd.Flags().StringSlice("plugins", nil, "paths to plugin .so files or directories containing plugins")
+	return cmd
 }
 
 func RunFormats(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tDESC\tSIGNATURES")
 
-	headers, err := format.FileHeaders()
+	scanners, err := format.GetFileScanners()
 	if err != nil {
 		return err
 	}
 
-	for _, hdr := range headers {
-		signatures := make([]string, len(hdr.Signatures))
-		for i, sig := range hdr.Signatures {
+	plugins, _ := cmd.Flags().GetStringSlice("plugins")
+	pluginPaths, err := listPlugins(plugins)
+	if err != nil {
+		return err
+	}
+
+	pluginScanners, err := format.LoadPlugins(pluginPaths...)
+	if err != nil {
+		return fmt.Errorf("failed to load plugins: %w", err)
+	}
+	scanners = append(scanners, pluginScanners...)
+
+	for _, sc := range scanners {
+		signatures := make([]string, len(sc.Signatures()))
+		for i, sig := range sc.Signatures() {
 			signatures[i] = hex.EncodeToString(sig)
 		}
 
 		fmt.Fprintf(w, "%s\t%s\t%s\n",
-			hdr.Ext,
-			hdr.Description,
+			sc.Ext(),
+			sc.Description(),
 			strings.Join(signatures, ","),
 		)
 	}

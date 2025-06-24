@@ -82,7 +82,7 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 
 			nextBlockOffset := blockOffset + uint64(len(sc.buf))
 
-			sc.scanBuffer(n, func(blockIdx int, hdr FileHeader) uint64 {
+			sc.scanBuffer(n, func(blockIdx int, fileScanner FileScanner) uint64 {
 				globalBlock := blockOffset/uint64(sc.blockSize) + uint64(blockIdx)
 				globalOffset := globalBlock * uint64(sc.blockSize)
 
@@ -121,7 +121,7 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 					maxSize,
 				)
 
-				res, err := hdr.ScanFile(r)
+				res, err := fileScanner.ScanFile(r)
 				if err != nil {
 					return 0
 				}
@@ -130,7 +130,7 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 					res,
 					uint32(globalBlock),
 					globalOffset,
-					hdr.Ext,
+					fileScanner.Ext(),
 				)
 
 				stop = !yield(finfo)
@@ -155,12 +155,12 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 	}
 }
 
-func (sc *Scanner) scanBuffer(n int, scanFile func(blockIdx int, hdr FileHeader) uint64) {
+func (sc *Scanner) scanBuffer(n int, scanFile func(blockIdx int, sc FileScanner) uint64) {
 	for blockIdx := 0; blockIdx < n; {
 		var size uint64
 
-		sc.r.Search(sc.buf[blockIdx*sc.blockSize:], func(hdr FileHeader) bool {
-			size = scanFile(blockIdx, hdr)
+		sc.r.Search(sc.buf[blockIdx*sc.blockSize:], func(sc FileScanner) bool {
+			size = scanFile(blockIdx, sc)
 			return size > 0
 		})
 

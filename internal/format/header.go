@@ -19,7 +19,11 @@
 // THE SOFTWARE.
 package format
 
-import "fmt"
+import (
+	"fmt"
+	"plugin"
+	"reflect"
+)
 
 type ScanResult struct {
 	Name string
@@ -52,9 +56,10 @@ var fileHeaders = []FileHeader{
 	pdfFileHeader,
 }
 
-func FileHeaders(ext ...string) ([]FileHeader, error) {
+func GetFileScanners(ext ...string) ([]FileScanner, error) {
 	if len(ext) == 0 {
-		return fileHeaders, nil
+		scanners := GetAllFileScanners()
+		return scanners, nil
 	}
 
 	headersByExt := make(map[string]FileHeader)
@@ -62,23 +67,62 @@ func FileHeaders(ext ...string) ([]FileHeader, error) {
 		headersByExt[hdr.Ext] = hdr
 	}
 
-	headers := make([]FileHeader, len(ext))
+	scanners := make([]FileScanner, len(ext))
 	for i, e := range ext {
 		hdr, ok := headersByExt[e]
 		if !ok {
 			return nil, fmt.Errorf("unknown file extension: \"%s\"", hdr.Ext)
 		}
-		headers[i] = hdr
+		scanners[i] = &headerFileScanner{hdr: hdr}
 	}
-	return headers, nil
+	return scanners, nil
 }
 
-func BuildFileRegistry(headers ...FileHeader) *FileRegistry {
+func GetAllFileScanners() []FileScanner {
+	scanners := make([]FileScanner, len(fileHeaders))
+	for i, hdr := range fileHeaders {
+		scanners[i] = &headerFileScanner{hdr: hdr}
+	}
+	return scanners
+}
+
+func BuildFileRegistry(scanners ...FileScanner) *FileRegistry {
 	r := NewFileRegisty()
-	for _, hdr := range headers {
-		r.Add(hdr)
+	for _, sc := range scanners {
+		r.Add(sc)
 	}
 	return r
+}
+
+func LoadPlugins(pluginPaths ...string) ([]FileScanner, error) {
+	scanners := make([]FileScanner, len(pluginPaths))
+	for i, path := range pluginPaths {
+		sc, err := loadPlugin(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load plugin %s: %w", path, err)
+		}
+		scanners[i] = sc
+	}
+	return scanners, nil
+}
+
+func loadPlugin(path string) (FileScanner, error) {
+	plug, err := plugin.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open plugin %s: %w", path, err)
+	}
+
+	symScanner, err := plug.Lookup("GetScanner")
+	if err != nil {
+		return nil, fmt.Errorf("plugin %s does not export FileScanner symbol: %w", path, err)
+	}
+
+	fmt.Println(reflect.TypeOf(symScanner))
+	getScanner, ok := symScanner.(func() (FileScanner, error))
+	if !ok {
+		return nil, fmt.Errorf("plugin %s GetScanner has wrong type", path)
+	}
+	return getScanner()
 }
 
 func (r *FileRegistry) Signatures() int {

@@ -39,15 +39,16 @@ import (
 )
 
 type Options struct {
-	DumpDir        string
-	ReportFile     string
-	MaxScanSize    uint64
-	ScanBufferSize uint64
-	BlockSize      uint64
-	MaxFileSize    uint64
-	DisableLog     bool
-	FileExt        []string
-	LogLevel       logger.Level
+	DumpDir        string       // DumpDir is the directory where carved files will be dumped. If empty, files will not be dumped.
+	ReportFile     string       // ReportFile is the path to the report file. If empty, a default name will be used.
+	MaxScanSize    uint64       // MaxScanSize is the maximum number of bytes to scan. If 0, the entire partition will be scanned.
+	ScanBufferSize uint64       // ScanBufferSize is the size of the buffer to use during scanning. If 0, a default size is used.
+	BlockSize      uint64       // BlockSize is the size of a block to read from the disk. If 0, the default block size is used.
+	MaxFileSize    uint64       // MaxFileSize is the maximum size of a carved file. If 0, no limit is applied.
+	DisableLog     bool         // DisableLog disables logging to a file. If true, no log file will be created.
+	FileExt        []string     // file extensions to parse, e.g. "jpg,png,txt"
+	Plugins        []string     // paths to plugin .so files or directories containing plugins
+	LogLevel       logger.Level // LogLevel specifies the minimum log level to write to the log file.
 }
 
 func Scan(filePath string, opts Options) error {
@@ -133,16 +134,24 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		logFilePath = absPath(filepath.Join(opts.DumpDir, session) + ".log")
 	}
 
-	headers, err := format.FileHeaders(opts.FileExt...)
+	scanners, err := format.GetFileScanners(opts.FileExt...)
 	if err != nil {
 		return err
 	}
 
-	registry := format.BuildFileRegistry(headers...)
+	if len(opts.Plugins) > 0 {
+		pluginScanners, err := format.LoadPlugins(opts.Plugins...)
+		if err != nil {
+			return err
+		}
+		scanners = append(scanners, pluginScanners...)
+	}
 
-	fileExts := make([]string, len(headers))
-	for i := range headers {
-		fileExts[i] = headers[i].Ext
+	registry := format.BuildFileRegistry(scanners...)
+
+	fileExts := make([]string, len(scanners))
+	for i := range scanners {
+		fileExts[i] = scanners[i].Ext()
 	}
 
 	logger, logFile, err := setupLogger(logFilePath, opts.LogLevel)
