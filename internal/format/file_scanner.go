@@ -19,47 +19,29 @@
 // THE SOFTWARE.
 package format
 
-import (
-	"github.com/ostafen/digler/pkg/table"
-)
-
-type FileRegistry struct {
-	table *table.PrefixTable[scanners]
+type FileScanner interface {
+	Ext() string
+	Description() string
+	Signatures() [][]byte
+	ScanFile(r *Reader) (*ScanResult, error)
 }
 
-type scanners []FileScanner
-
-func NewFileRegisty() *FileRegistry {
-	return &FileRegistry{
-		table: table.New[scanners](),
-	}
+type headerFileScanner struct {
+	hdr FileHeader
 }
 
-func (r *FileRegistry) Add(sc FileScanner) {
-	for _, sig := range sc.Signatures() {
-		scanners, _ := r.table.Get(sig)
-
-		r.table.Insert(
-			sig,
-			append(scanners, sc),
-		)
-	}
+func (s *headerFileScanner) Ext() string {
+	return s.hdr.Ext
 }
 
-// Searches the registry for headers where the key matches a prefix of `data`.
-// The search starts with `r.minKeyLen` and iteratively extends the key length
-// as long as matching headers are found. Each found header is processed by `handleHeader`.
-func (r *FileRegistry) Search(data []byte, handleHeader func(sc FileScanner) bool) {
-	if r.table.Size() == 0 {
-		return
-	}
+func (s *headerFileScanner) Description() string {
+	return s.hdr.Description
+}
 
-	r.table.Walk(data, func(scanners scanners) bool {
-		for _, sc := range scanners {
-			if handleHeader(sc) {
-				return true
-			}
-		}
-		return false
-	})
+func (s *headerFileScanner) Signatures() [][]byte {
+	return s.hdr.Signatures
+}
+
+func (s *headerFileScanner) ScanFile(r *Reader) (*ScanResult, error) {
+	return s.hdr.ScanFile(r)
 }
