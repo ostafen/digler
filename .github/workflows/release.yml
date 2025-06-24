@@ -1,0 +1,55 @@
+name: Release Build
+
+on:
+  push:
+    branches:
+      - 'release/v*.*.*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    name: Build and Release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'  # Or your project's Go version
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "github-actions"
+
+      - name: Extract release version from branch name
+        run: |
+          VERSION=${GITHUB_REF#refs/heads/release/}
+          echo "RELEASE_TAG=$VERSION" >> $GITHUB_ENV
+
+      - name: Create Git tag
+        run: |
+          git fetch --tags
+          if ! git rev-parse "$RELEASE_TAG" >/dev/null 2>&1; then
+            git tag "$RELEASE_TAG"
+            git push origin "$RELEASE_TAG"
+          else
+            echo "Tag $RELEASE_TAG already exists."
+          fi
+
+      - name: Build binaries
+        run: make build
+
+      - name: Create GitHub Release and attach binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
+          files: |
+            bin/*
+          draft: true
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
