@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img alt="Digler Demo" src="assets/demo.gif" width="600px">
+  <img alt="Digler Demo" src="assets/demo.gif" width="700px">
 </p>
 
 ## Why Digler?
