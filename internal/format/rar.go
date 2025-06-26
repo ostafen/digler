@@ -101,7 +101,6 @@ func ScanRAR(r *Reader) (*ScanResult, error) {
 
 		hdrType := hdrBuf[2]
 		flags := binary.LittleEndian.Uint16(hdrBuf[3:5])
-
 		if hdrType < 0x72 || hdrType > 0x7B {
 			return nil, fmt.Errorf("invalid RAR file header type: expected 0x72-0x7A or 0x7B, got 0x%02x", hdrType)
 		}
@@ -112,15 +111,19 @@ func ScanRAR(r *Reader) (*ScanResult, error) {
 
 		payloadSize := uint32(binary.LittleEndian.Uint16(hdrBuf[5:7]))
 		switch hdrType {
-		case 0x74, 0x75:
-			// Both 0x74 (File Header) and 0x75 (Comment Header) have a Pack Size field
-			if hdrType == 0x74 || (hdrType == 0x75 && flags&0x0008 != 0) {
-				_, err = r.Read(hdrBuf[:4]) // Read the next 4 bytes for Pack Size
-				if err != nil {
-					return nil, err
+		case 0x74, 0x75, 0x7A:
+			// File Header, Comment Header and Subblock Header have a Data Size field
+			err := func() error {
+				if hdrType == 0x75 && flags&0x0008 == 0 {
+					return nil // Skip if it's a Comment Header without the 0x0008 flag
 				}
+				_, err = r.Read(hdrBuf[:4]) // Read the next 4 bytes for Pack Size
 				payloadSize += binary.LittleEndian.Uint32(hdrBuf[:])
 				n += 4
+				return err
+			}()
+			if err != nil {
+				return nil, err
 			}
 		case 0x78: // Recovery Header
 			var recoveryBuf [8]byte
