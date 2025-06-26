@@ -50,11 +50,8 @@ func ScanRAR(r *Reader) (*ScanResult, error) {
 		return nil, err
 	}
 
-	isRar15 := bytes.Equal(buf[:7], Rar15Signature)
-	//isRar50 := bytes.Equal(buf[:8], Rar50Signature)
-
-	if !isRar15 {
-		return nil, fmt.Errorf("invalid RAR signature")
+	if !bytes.Equal(buf[:7], Rar15Signature) {
+		return nil, fmt.Errorf("invalid RAR 1.5 signature")
 	}
 
 	// RAR 1.5 Archive Header Structure
@@ -97,33 +94,53 @@ func ScanRAR(r *Reader) (*ScanResult, error) {
 		// File Attributes	(4 bytes)	DOS file attributes (read-only, hidden, system, archive, etc.)
 
 		var hdrBuf [7]byte // Read header up to Pack Size
-		_, err := r.Read(hdrBuf[:])
+		n, err := r.Read(hdrBuf[:])
 		if err != nil {
 			return nil, err
 		}
 
 		hdrType := hdrBuf[2]
+		flags := binary.LittleEndian.Uint16(hdrBuf[3:5])
+
+		if hdrType < 0x72 || hdrType > 0x7B {
+			return nil, fmt.Errorf("invalid RAR file header type: expected 0x72-0x7A or 0x7B, got 0x%02x", hdrType)
+		}
+
 		if hdrType == 0x7B { // RAR 1.5 End of Archive Header
 			break
 		}
 
-		if hdrType < 0x72 || hdrType > 0x7A {
-			return nil, fmt.Errorf("invalid RAR file header type: expected 0x72-0x7A or 0x7B, got 0x%02x", hdrType)
+		payloadSize := uint32(binary.LittleEndian.Uint16(hdrBuf[5:7]))
+		switch hdrType {
+		case 0x74, 0x75:
+			// Both 0x74 (File Header) and 0x75 (Comment Header) have a Pack Size field
+			if hdrType == 0x74 || (hdrType == 0x75 && flags&0x0008 != 0) {
+				_, err = r.Read(hdrBuf[:4]) // Read the next 4 bytes for Pack Size
+				if err != nil {
+					return nil, err
+				}
+				payloadSize += binary.LittleEndian.Uint32(hdrBuf[:])
+				n += 4
+			}
+		case 0x78: // Recovery Header
+			var recoveryBuf [8]byte
+			_, err = r.Read(recoveryBuf[:])
+			if err != nil {
+				return nil, err
+			}
+
+			numBlocks := binary.LittleEndian.Uint32(recoveryBuf[:4])
+			blockSize := binary.LittleEndian.Uint32(recoveryBuf[4:])
+			payloadSize += numBlocks * blockSize
+			n += 8
 		}
 
-		if hdrBuf[2] != 0x74 {
-			return nil, fmt.Errorf("invalid RAR file header type: expected 0x74, got 0x%02x", hdrBuf[0])
+		if payloadSize <= uint32(n) {
+			return nil, fmt.Errorf("invalid RAR file header: payload size %d is less than or equal to header size %d", payloadSize, n)
 		}
-
-		hdrSize := binary.LittleEndian.Uint16(hdrBuf[5:7])
-		_, err = r.Read(hdrBuf[:4]) // Read the next 4 bytes for Pack Size
-		if err != nil {
-			return nil, err
-		}
-		packSize := binary.LittleEndian.Uint32(hdrBuf[:])
 
 		// Discard the rest of the header and the packed data
-		_, err = r.Discard(int(hdrSize) + int(packSize) - 11)
+		_, err = r.Discard(int(payloadSize) - n)
 		if err != nil {
 			return nil, fmt.Errorf("error discarding RAR file header and packed data: %w", err)
 		}
