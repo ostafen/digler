@@ -69,6 +69,19 @@ func (r *Reader) Read(buf []byte) (int, error) {
 	return n, err
 }
 
+func (r *Reader) Seek(offset int64, whence int) (int64, error) {
+	return r.r.Seek(offset, whence)
+}
+
+func (r *Reader) Unread(n int) error {
+	_, err := r.Seek(-int64(n), io.SeekCurrent)
+	return err
+}
+
+func (r *Reader) UnreadByte() error {
+	return r.Unread(1)
+}
+
 func (r *Reader) Discard(n int) (int, error) {
 	offset, err := r.r.Seek(int64(n), io.SeekCurrent)
 	if err != nil {

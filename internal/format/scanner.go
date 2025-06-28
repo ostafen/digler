@@ -37,6 +37,8 @@ type Scanner struct {
 	r         *FileRegistry
 	logger    *logger.Logger
 	bufReader *reader.BufferedReadSeeker
+
+	foundSignatures int
 }
 
 type FileInfo struct {
@@ -83,6 +85,8 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 			nextBlockOffset := blockOffset + uint64(len(sc.buf))
 
 			sc.scanBuffer(n, func(blockIdx int, fileScanner FileScanner) uint64 {
+				sc.foundSignatures++
+
 				globalBlock := blockOffset/uint64(sc.blockSize) + uint64(blockIdx)
 				globalOffset := globalBlock * uint64(sc.blockSize)
 
@@ -171,6 +175,10 @@ func (sc *Scanner) scanBuffer(n int, scanFile func(blockIdx int, sc FileScanner)
 			blockIdx++
 		}
 	}
+}
+
+func (sc *Scanner) FoundSignatures() int {
+	return sc.foundSignatures
 }
 
 func roundToMul[T int | int64 | uint64](n, m T) T {
