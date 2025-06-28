@@ -54,6 +54,8 @@ var fileHeaders = []FileHeader{
 	zipFileHeader,
 	rarFileHeader,
 	pdfFileHeader,
+	// database formats
+	sqliteFileHeader,
 }
 
 func GetFileScanners(ext ...string) ([]FileScanner, error) {
