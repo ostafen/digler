@@ -4,7 +4,7 @@
 <h2 align="center">Digler - Go Deep. Get Back Your Data</h2>
 
 <p align="center">
-  ⚠️ <strong>Note:</strong> Digler is in early development (v0.0.1). Some bugs may exist. Please report issues!
+  ⚠️ <strong>Note:</strong> Digler is in early development (<a href="https://github.com/ostafen/digler/releases/tag/v0.1.0" target="_blank" rel="noopener noreferrer">v0.1.0</a>). Some bugs may exist. Please report issues!
 </p>
 
 <p align="center">
@@ -54,7 +54,7 @@ make build
 
 **From Precompiled Binaries:**
 
-Precompiled binaries will be available for Linux, macOS, and Windows on the Releases page.
+Precompiled binaries are available for Linux, macOS, and Windows on the [Releases page](https://github.com/ostafen/digler/releases).
 
 ## Usage
 
