@@ -52,6 +52,7 @@ var fileHeaders = []FileHeader{
 	tiffFileHeader,
 	// generic/documents formats
 	zipFileHeader,
+	rarFileHeader,
 	pdfFileHeader,
 }
 

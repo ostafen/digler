@@ -34,6 +34,7 @@ func Execute() error {
 	rootCmd.AddCommand(DefineRecoverCommand())
 	rootCmd.AddCommand(DefineMountCommand())
 	rootCmd.AddCommand(DefineFormatsCommand())
+	rootCmd.AddCommand(DefineMergeCommand())
 
 	return rootCmd.Execute()
 }

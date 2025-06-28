@@ -231,9 +231,10 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 	}
 
 	logger.Infof("Scan completed!")
-	logger.Infof("Files found: \t%d", filesFound)
-	logger.Infof("Total data: \t%s", fmtutil.FormatBytes(int64(size)))
-	logger.Infof("Duration: \t%s", FormatDurationHMS(time.Since(start)))
+	logger.Infof("Signatures found: \t%d", sc.FoundSignatures())
+	logger.Infof("Files found: \t\t%d", filesFound)
+	logger.Infof("Total data: \t\t%s", fmtutil.FormatBytes(int64(size)))
+	logger.Infof("Duration: \t\t%s", FormatDurationHMS(time.Since(start)))
 	logger.Infof("Report saved to: \t%s", absPath(reportFileName))
 
 	if !opts.DisableLog {
