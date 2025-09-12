@@ -17,59 +17,56 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-package format
+package main
 
 import (
-	"github.com/ostafen/digler/pkg/table"
+	"embed"
+
+	"github.com/ostafen/digler/internal/app"
+	"github.com/ostafen/digler/internal/app/api"
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
-var DefaultRegistry *FileRegistry
+//go:embed all:frontend/dist
+var assets embed.FS
 
-func init() {
-	DefaultRegistry = NewFileRegisty()
+const (
+	AppName = "Digler"
 
-	for _, sc := range GetAllFileScanners() {
-		DefaultRegistry.Add(sc)
-	}
-}
+	Width  = 900
+	Height = 900
+)
 
-type FileRegistry struct {
-	table *table.PrefixTable[scanners]
-}
+func main() {
+	sysAPI := &api.SystemAPI{}
+	scanAPI := &api.ScanAPI{}
 
-type scanners []FileScanner
+	app := &app.App{}
 
-func NewFileRegisty() *FileRegistry {
-	return &FileRegistry{
-		table: table.New[scanners](),
-	}
-}
-
-func (r *FileRegistry) Add(sc FileScanner) {
-	for _, sig := range sc.Signatures() {
-		scanners, _ := r.table.Get(sig)
-
-		r.table.Insert(
-			sig,
-			append(scanners, sc),
-		)
-	}
-}
-
-// Searches the registry for headers where the key matches a prefix of `data`.
-// The search starts with `r.minKeyLen` and iteratively extends the key length
-// as long as matching headers are found. Each found header is processed by `handleHeader`.
-func (r *FileRegistry) Search(data []byte, handleHeader func(sc FileScanner) bool) {
-	if r.table.Size() == 0 {
-		return
-	}
-
-	r.table.Walk(data, func(scanners scanners) bool {
-		for _, sc := range scanners {
-			if handleHeader(sc) {
-				return true
-			}
-		}
-		return false
+	err := wails.Run(&options.App{
+		Title:         AppName,
+		Width:         Width,
+		Height:        Height,
+		DisableResize: true,
+		Assets:        assets,
+		OnStartup:     app.Startup,
+		OnShutdown:    app.Shutdown,
+		Bind: []any{
+			app,
+			sysAPI,
+			scanAPI,
+		},
+		Windows: &windows.Options{
+			WebviewIsTransparent: false,
+		},
 	})
+	exitOnError(err)
+}
+
+func exitOnError(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

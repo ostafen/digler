@@ -17,59 +17,49 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-package format
+package sync
 
 import (
-	"github.com/ostafen/digler/pkg/table"
+	"sync"
 )
 
-var DefaultRegistry *FileRegistry
+type PauseGate struct {
+	mu      sync.Mutex
+	counter int64
+	cond    *sync.Cond
+}
 
-func init() {
-	DefaultRegistry = NewFileRegisty()
+func NewPauseGate() *PauseGate {
+	g := &PauseGate{}
+	g.cond = sync.NewCond(&g.mu)
+	return g
+}
 
-	for _, sc := range GetAllFileScanners() {
-		DefaultRegistry.Add(sc)
+func (g *PauseGate) Pause() {
+	g.mu.Lock()
+	g.counter++
+	g.mu.Unlock()
+}
+
+func (g *PauseGate) Resume() {
+	g.mu.Lock()
+	g.counter--
+	if g.counter < 0 {
+		panic("Resume() called without any previous call to Pause()")
 	}
+	g.cond.Signal()
+	g.mu.Unlock()
 }
 
-type FileRegistry struct {
-	table *table.PrefixTable[scanners]
-}
+func (g *PauseGate) WaitResume() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 
-type scanners []FileScanner
-
-func NewFileRegisty() *FileRegistry {
-	return &FileRegistry{
-		table: table.New[scanners](),
-	}
-}
-
-func (r *FileRegistry) Add(sc FileScanner) {
-	for _, sig := range sc.Signatures() {
-		scanners, _ := r.table.Get(sig)
-
-		r.table.Insert(
-			sig,
-			append(scanners, sc),
-		)
-	}
-}
-
-// Searches the registry for headers where the key matches a prefix of `data`.
-// The search starts with `r.minKeyLen` and iteratively extends the key length
-// as long as matching headers are found. Each found header is processed by `handleHeader`.
-func (r *FileRegistry) Search(data []byte, handleHeader func(sc FileScanner) bool) {
-	if r.table.Size() == 0 {
+	if g.counter == 0 {
 		return
 	}
 
-	r.table.Walk(data, func(scanners scanners) bool {
-		for _, sc := range scanners {
-			if handleHeader(sc) {
-				return true
-			}
-		}
-		return false
-	})
+	for g.counter > 0 {
+		g.cond.Wait()
+	}
 }

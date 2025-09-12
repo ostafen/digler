@@ -21,12 +21,15 @@ package format
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"sync/atomic"
 
 	"github.com/ostafen/digler/internal/logger"
 	"github.com/ostafen/digler/pkg/pbar"
 	"github.com/ostafen/digler/pkg/reader"
+	syncutils "github.com/ostafen/digler/pkg/util/sync"
 )
 
 type Scanner struct {
@@ -38,7 +41,11 @@ type Scanner struct {
 	logger    *logger.Logger
 	bufReader *reader.BufferedReadSeeker
 
-	foundSignatures int
+	foundSignatures atomic.Uint64
+	filesFound      atomic.Uint64
+	bytesScanned    atomic.Uint64
+	scanSize        atomic.Uint64
+	*syncutils.PauseGate
 }
 
 type FileInfo struct {
@@ -62,21 +69,42 @@ func NewScanner(
 		r:           r,
 		logger:      logger,
 		bufReader:   reader.NewBufferedReadSeeker(nil, 4096),
+		PauseGate:   syncutils.NewPauseGate(),
 	}
 }
 
-func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bool) {
+func (sc *Scanner) Scan(ctx context.Context, r io.ReaderAt, size uint64) func(yield func(FileInfo) bool) {
+	ctxDone := func() bool {
+		select {
+		case <-ctx.Done():
+			return true
+		default:
+			return false
+		}
+	}
+
 	return func(yield func(FileInfo) bool) {
 		stop := false
+
+		sc.scanSize.Store(size)
+		sc.bytesScanned.Store(0)
+		sc.foundSignatures.Store(0)
+		sc.filesFound.Store(0)
 
 		pb := pbar.NewProgressBarState(int64(size))
 		defer pb.Finish()
 
-		filesFound := 0
-
 		for blockOffset := uint64(0); !stop && blockOffset < size; {
+			if ctxDone() {
+				// TODO: return error
+				return
+			}
+
+			sc.WaitResume()
+
 			n, err := r.ReadAt(sc.buf, int64(blockOffset))
 			if err != nil && err != io.EOF {
+				// TODO: return error
 				return
 			}
 
@@ -85,13 +113,15 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 			nextBlockOffset := blockOffset + uint64(len(sc.buf))
 
 			sc.scanBuffer(n, func(blockIdx int, fileScanner FileScanner) uint64 {
-				sc.foundSignatures++
+				sc.foundSignatures.Add(1)
 
 				globalBlock := blockOffset/uint64(sc.blockSize) + uint64(blockIdx)
 				globalOffset := globalBlock * uint64(sc.blockSize)
 
+				sc.bytesScanned.Store(globalOffset)
+
 				pb.ProcessedBytes = int64(globalOffset)
-				pb.FilesFound = filesFound
+				pb.FilesFound = int(sc.FilesFound())
 				pb.Render(false)
 
 				bufData := sc.buf[blockIdx*sc.blockSize : n*sc.blockSize]
@@ -138,12 +168,11 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 				)
 
 				stop = !yield(finfo)
-
-				filesFound++
+				sc.filesFound.Add(1)
 
 				nextBlockOffset = max(
 					nextBlockOffset,
-					roundToMul(globalOffset+res.Size, uint64(sc.blockSize)),
+					ceilDiv(globalOffset+res.Size, uint64(sc.blockSize)),
 				)
 				return res.Size
 			})
@@ -153,8 +182,9 @@ func (sc *Scanner) Scan(r io.ReaderAt, size uint64) func(yield func(FileInfo) bo
 			blockOffset = nextBlockOffset
 		}
 
+		sc.bytesScanned.Store(size)
 		pb.ProcessedBytes = int64(size)
-		pb.FilesFound = filesFound
+		pb.FilesFound = int(sc.FilesFound())
 		pb.Render(true)
 	}
 }
@@ -177,12 +207,24 @@ func (sc *Scanner) scanBuffer(n int, scanFile func(blockIdx int, sc FileScanner)
 	}
 }
 
-func (sc *Scanner) FoundSignatures() int {
-	return sc.foundSignatures
+func (sc *Scanner) SignaturesFound() uint64 {
+	return sc.foundSignatures.Load()
+}
+
+func (sc *Scanner) FilesFound() uint64 {
+	return sc.filesFound.Load()
+}
+
+func (sc *Scanner) Progress() float64 {
+	return float64(sc.bytesScanned.Load()) / float64(sc.scanSize.Load())
+}
+
+func ceilDiv[T int | int64 | uint64](n, m T) T {
+	return (n + m - 1) / m
 }
 
 func roundToMul[T int | int64 | uint64](n, m T) T {
-	k := (n + m - 1) / m
+	k := ceilDiv(n, m)
 	return k * m
 }
 

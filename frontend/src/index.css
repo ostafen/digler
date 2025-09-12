@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Digler Forensic Recovery Tool Design System
+All colors MUST be HSL for consistent theming
+*/
+
+@layer base {
+  :root {
+    /* Core Brand Colors */
+    --background: 0 0% 100%;
+    --foreground: 30 15% 20%;
+    
+    /* Brand Identity - Earth Tones with Blue Accent */
+    --primary: 25 35% 45%;
+    --primary-light: 25 40% 60%;
+    --primary-dark: 25 30% 35%;
+    --primary-foreground: 0 0% 98%;
+    
+    /* Recovery Status Colors */
+    --success: 142 72% 29%;
+    --success-light: 142 72% 45%;
+    --success-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 30 15% 20%;
+    --danger: 0 72% 51%;
+    --danger-foreground: 0 0% 98%;
+    --info: 200 50% 55%;
+    --info-foreground: 0 0% 98%;
+    
+    /* Neutral Palette */
+    --muted: 30 8% 95%;
+    --muted-foreground: 30 10% 50%;
+    --subtle: 30 6% 92%;
+    --border: 30 8% 88%;
+    --input: 30 8% 95%;
+    --ring: 25 35% 45%;
+    
+    /* Card System */
+    --card: 0 0% 100%;
+    --card-foreground: 30 15% 20%;
+    
+    /* Secondary Actions */
+    --secondary: 30 8% 95%;
+    --secondary-foreground: 30 15% 20%;
+    
+    /* Accent System */
+    --accent: 30 6% 92%;
+    --accent-foreground: 30 15% 20%;
+    
+    /* Destructive Actions */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    
+    /* Popover System */
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 15% 20%;
+    
+    /* Border Radius */
+    --radius: 0.75rem;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    --gradient-recovery: linear-gradient(90deg, hsl(var(--success)), hsl(var(--success-light)));
+    --gradient-subtle: linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--primary-dark)), hsl(var(--info)));
+    
+    /* Shadows */
+    --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-elevated: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-progress: 0 0 20px hsl(var(--primary) / 0.3);
+    
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-quick: all 0.15s ease-out;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+@layer components {
+  /* Hero Section Styles */
+  .hero-gradient {
+    background: var(--gradient-hero);
+  }
+  
+  /* Progress Bar Styles */
+  .progress-glow {
+    box-shadow: var(--shadow-progress);
+  }
+  
+  /* Card Styles */
+  .card-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+  
+  /* Transition Utilities */
+  .transition-smooth {
+    transition: var(--transition-smooth);
+  }
+  
+  .transition-quick {
+    transition: var(--transition-quick);
+  }
+}

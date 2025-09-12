@@ -20,6 +20,7 @@
 package scan
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -193,8 +194,9 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		}
 	}
 
+	ctx := context.Background()
+
 	start := time.Now()
-	filesFound := 0
 	var totalDataSize uint64 = 0
 
 	sc := format.NewScanner(
@@ -204,8 +206,7 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 		int(blockSize),
 		opts.MaxFileSize,
 	)
-	for finfo := range sc.Scan(r, size) {
-		filesFound++
+	for finfo := range sc.Scan(ctx, r, size) {
 		totalDataSize += finfo.Size
 
 		if opts.DumpDir != "" {
@@ -231,8 +232,8 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 	}
 
 	logger.Infof("Scan completed!")
-	logger.Infof("Signatures found: \t%d", sc.FoundSignatures())
-	logger.Infof("Files found: \t\t%d", filesFound)
+	logger.Infof("Signatures found: \t%d", sc.SignaturesFound())
+	logger.Infof("Files found: \t\t%d", sc.FilesFound())
 	logger.Infof("Total data: \t\t%s", fmtutil.FormatBytes(int64(size)))
 	logger.Infof("Duration: \t\t%s", FormatDurationHMS(time.Since(start)))
 	logger.Infof("Report saved to: \t%s", absPath(reportFileName))

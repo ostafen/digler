@@ -17,59 +17,36 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-package format
+package api
 
 import (
-	"github.com/ostafen/digler/pkg/table"
+	"os"
+
+	"github.com/ostafen/digler/pkg/sysinfo"
 )
 
-var DefaultRegistry *FileRegistry
+type SystemAPI struct{}
 
-func init() {
-	DefaultRegistry = NewFileRegisty()
-
-	for _, sc := range GetAllFileScanners() {
-		DefaultRegistry.Add(sc)
-	}
+func (s *SystemAPI) WorkingDir() (string, error) {
+	return os.Getwd()
 }
 
-type FileRegistry struct {
-	table *table.PrefixTable[scanners]
+type DeviceInfo struct {
+	Name  string `json:"name"`
+	Path  string `json:"path"`
+	Model string `json:"model"`
+	Size  int64  `json:"size"`
 }
 
-type scanners []FileScanner
-
-func NewFileRegisty() *FileRegistry {
-	return &FileRegistry{
-		table: table.New[scanners](),
-	}
-}
-
-func (r *FileRegistry) Add(sc FileScanner) {
-	for _, sig := range sc.Signatures() {
-		scanners, _ := r.table.Get(sig)
-
-		r.table.Insert(
-			sig,
-			append(scanners, sc),
-		)
-	}
-}
-
-// Searches the registry for headers where the key matches a prefix of `data`.
-// The search starts with `r.minKeyLen` and iteratively extends the key length
-// as long as matching headers are found. Each found header is processed by `handleHeader`.
-func (r *FileRegistry) Search(data []byte, handleHeader func(sc FileScanner) bool) {
-	if r.table.Size() == 0 {
-		return
+func (s *SystemAPI) ListDevices() ([]DeviceInfo, error) {
+	devices, err := sysinfo.ListDevices()
+	if err != nil {
+		return nil, err
 	}
 
-	r.table.Walk(data, func(scanners scanners) bool {
-		for _, sc := range scanners {
-			if handleHeader(sc) {
-				return true
-			}
-		}
-		return false
-	})
+	deviceNames := make([]DeviceInfo, len(devices))
+	for i, device := range devices {
+		deviceNames[i] = DeviceInfo(device)
+	}
+	return deviceNames, nil
 }

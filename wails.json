@@ -1,0 +1,17 @@
+{
+    "name": "Digler",
+    "description": "A Wails application",
+    "author": {
+        "name": "Stefano Scafiti",
+        "email": "stefano.scafiti96@gmail.com"
+    },
+    "frontend": {
+        "dir": "frontend",
+        "install": "npm install",
+        "build": "npm run build",
+        "bridge": ""
+    },
+    "outputfilename": "digler",
+    "wailsjsdir": "frontend/src/",
+    "main": "./cmd/wails"
+}

@@ -17,59 +17,45 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-package format
+package app
 
 import (
-	"github.com/ostafen/digler/pkg/table"
+	"context"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var DefaultRegistry *FileRegistry
-
-func init() {
-	DefaultRegistry = NewFileRegisty()
-
-	for _, sc := range GetAllFileScanners() {
-		DefaultRegistry.Add(sc)
-	}
+type App struct {
+	ctx context.Context
 }
 
-type FileRegistry struct {
-	table *table.PrefixTable[scanners]
+func (a *App) Startup(ctx context.Context) {
+	a.ctx = ctx
 }
 
-type scanners []FileScanner
+func (a *App) Shutdown(ctx context.Context) {}
 
-func NewFileRegisty() *FileRegistry {
-	return &FileRegistry{
-		table: table.New[scanners](),
-	}
+type FileDialogFilter struct {
+	Name    string `json:"name"`
+	Pattern string `json:"pattern"`
 }
 
-func (r *FileRegistry) Add(sc FileScanner) {
-	for _, sig := range sc.Signatures() {
-		scanners, _ := r.table.Get(sig)
-
-		r.table.Insert(
-			sig,
-			append(scanners, sc),
-		)
+// OpenFileDialog opens a native file picker and returns the absolute path
+func (a *App) OpenFileDialog(title string, filters []FileDialogFilter) (string, error) {
+	runtimeFilters := make([]runtime.FileFilter, len(filters))
+	for i, f := range filters {
+		runtimeFilters[i] = runtime.FileFilter{DisplayName: f.Name, Pattern: f.Pattern}
 	}
+
+	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:   title,
+		Filters: runtimeFilters,
+	})
 }
 
-// Searches the registry for headers where the key matches a prefix of `data`.
-// The search starts with `r.minKeyLen` and iteratively extends the key length
-// as long as matching headers are found. Each found header is processed by `handleHeader`.
-func (r *FileRegistry) Search(data []byte, handleHeader func(sc FileScanner) bool) {
-	if r.table.Size() == 0 {
-		return
-	}
-
-	r.table.Walk(data, func(scanners scanners) bool {
-		for _, sc := range scanners {
-			if handleHeader(sc) {
-				return true
-			}
-		}
-		return false
+// OpenFolderDialog opens a folder picker
+func (a *App) OpenFolderDialog() (string, error) {
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select output folder",
 	})
 }
