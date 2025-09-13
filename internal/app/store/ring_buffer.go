@@ -17,61 +17,44 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-package main
+package store
 
-import (
-	"context"
-	"embed"
-
-	"github.com/ostafen/digler/internal/app"
-	"github.com/ostafen/digler/internal/app/api"
-	"github.com/ostafen/digler/internal/app/store"
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/windows"
-)
-
-//go:embed all:frontend/dist
-var assets embed.FS
-
-const (
-	AppName = "Digler"
-
-	Width  = 900
-	Height = 900
-)
-
-func main() {
-	store, err := store.NewStore[api.ScanRecord](AppName, 100)
-	exitOnError(err)
-
-	sysAPI := &api.SystemAPI{}
-	scanAPI := &api.ScanAPI{Store: store}
-
-	app := &app.App{}
-
-	err = wails.Run(&options.App{
-		Title:         AppName,
-		Width:         Width,
-		Height:        Height,
-		DisableResize: true,
-		Assets:        assets,
-		OnStartup:     app.Startup,
-		OnShutdown:    func(ctx context.Context) { store.Close() },
-		Bind: []any{
-			app,
-			sysAPI,
-			scanAPI,
-		},
-		Windows: &windows.Options{
-			WebviewIsTransparent: false,
-		},
-	})
-	exitOnError(err)
+type RingBuffer[T any] struct {
+	buf       []T
+	nextIndex int
+	n         int
 }
 
-func exitOnError(err error) {
-	if err != nil {
-		panic(err)
+func NewRingBuffer[T any](capacity int) *RingBuffer[T] {
+	return &RingBuffer[T]{
+		buf:       make([]T, capacity),
+		nextIndex: 0,
+		n:         0,
 	}
+}
+
+func (buf *RingBuffer[T]) Append(x T) (T, bool) {
+	old := buf.buf[buf.nextIndex]
+	buf.buf[buf.nextIndex] = x
+	buf.nextIndex = (buf.nextIndex + 1) % len(buf.buf)
+
+	replaced := buf.n >= len(buf.buf)
+	if !replaced {
+		buf.n++
+	}
+	return old, replaced
+}
+
+func (buf *RingBuffer[T]) Get(i int) T {
+	start := (buf.nextIndex - buf.n) + len(buf.buf)
+	return buf.buf[(start+i)%len(buf.buf)]
+}
+
+func (buf *RingBuffer[T]) Reset() {
+	buf.n = 0
+	buf.nextIndex = 0
+}
+
+func (buf *RingBuffer[T]) Len() int {
+	return buf.n
 }

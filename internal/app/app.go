@@ -33,8 +33,6 @@ func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
-func (a *App) Shutdown(ctx context.Context) {}
-
 type FileDialogFilter struct {
 	Name    string `json:"name"`
 	Pattern string `json:"pattern"`

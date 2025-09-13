@@ -4,7 +4,11 @@ import {api} from '../models';
 
 export function AbortScan(arg1:string):Promise<void>;
 
+export function ClearScanHistory():Promise<void>;
+
 export function FileContent(arg1:string,arg2:string):Promise<string>;
+
+export function LoadScanHistory(arg1:number):Promise<Array<api.ScanHistoryRecord>>;
 
 export function PauseScan(arg1:string):Promise<void>;
 
@@ -15,6 +19,8 @@ export function RecoveryProgress(arg1:string):Promise<api.RecoveryStatus>;
 export function ResumeScan(arg1:string):Promise<void>;
 
 export function ScanResult(arg1:string):Promise<api.ScanResultResponse>;
+
+export function SetCurrentScan(arg1:string):Promise<void>;
 
 export function StartRecovery(arg1:string,arg2:Array<string>,arg3:string):Promise<void>;
 

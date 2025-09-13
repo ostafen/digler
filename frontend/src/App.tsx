@@ -46,7 +46,7 @@ const App = () => {
 
   const handleOpenRecent = (scanId: string) => {
     // Mock opening recent scan
-    setScanResults({ filesFound: 0, path: "/Users/john/disk_image.dd", scanId: "" });
+    setScanResults({ filesFound: 0, path: "/Users/john/disk_image.dd", scanId: scanId });
     setCurrentScreen("results");
   };
 

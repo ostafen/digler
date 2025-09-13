@@ -6,8 +6,16 @@ export function AbortScan(arg1) {
   return window['go']['api']['ScanAPI']['AbortScan'](arg1);
 }
 
+export function ClearScanHistory() {
+  return window['go']['api']['ScanAPI']['ClearScanHistory']();
+}
+
 export function FileContent(arg1, arg2) {
   return window['go']['api']['ScanAPI']['FileContent'](arg1, arg2);
+}
+
+export function LoadScanHistory(arg1) {
+  return window['go']['api']['ScanAPI']['LoadScanHistory'](arg1);
 }
 
 export function PauseScan(arg1) {
@@ -28,6 +36,10 @@ export function ResumeScan(arg1) {
 
 export function ScanResult(arg1) {
   return window['go']['api']['ScanAPI']['ScanResult'](arg1);
+}
+
+export function SetCurrentScan(arg1) {
+  return window['go']['api']['ScanAPI']['SetCurrentScan'](arg1);
 }
 
 export function StartRecovery(arg1, arg2, arg3) {

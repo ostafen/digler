@@ -127,3 +127,25 @@ func CopyFile(dst io.Writer, filePath string) (int64, error) {
 
 	return io.Copy(dst, f)
 }
+
+func FileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func AtomicWriteFile(filePath string, writeFile func(f *os.File) error) error {
+	tempFile, err := os.CreateTemp("", "tmp-*.json")
+	if err != nil {
+		return err
+	}
+	tempPath := tempFile.Name()
+	defer os.Remove(tempPath)
+
+	if err := writeFile(tempFile); err != nil {
+		tempFile.Close()
+		return err
+	}
+	_ = tempFile.Close()
+
+	return os.Rename(tempPath, filePath)
+}

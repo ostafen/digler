@@ -16,7 +16,6 @@ import { api } from '../wailsjs/go/models.ts';
 import { WorkingDir, ListDevices } from '../wailsjs/go/api/SystemAPI';
 import { StartScan, PollStatus, PauseScan, ResumeScan, AbortScan } from '../wailsjs/go/api/ScanAPI';
 import { formatFileSize } from '../lib/utils';
-import { c } from "node_modules/framer-motion/dist/types.d-Cjd591yU";
 
 interface ScanProps {
   onBack: () => void;

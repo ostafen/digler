@@ -24,16 +24,21 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"sync"
 	"sync/atomic"
+	"time"
 
-	"github.com/google/uuid"
+	"github.com/ostafen/digler/internal/app/store"
 	"github.com/ostafen/digler/internal/format"
 	"github.com/ostafen/digler/internal/fs"
 	"github.com/ostafen/digler/internal/logger"
 	"github.com/ostafen/digler/pkg/sysinfo"
+	osutils "github.com/ostafen/digler/pkg/util/os"
 )
 
 var ErrScanInProgress = fmt.Errorf("a scan is already in progress")
@@ -50,7 +55,6 @@ const (
 	ScanStatusScanning ScanStatus = "scanning"
 	ScanStatusPaused   ScanStatus = "paused"
 	ScanStatusRecovery ScanStatus = "recovery"
-	ScanStatusError    ScanStatus = "error"
 	ScanStatusDone     ScanStatus = "done"
 )
 
@@ -64,43 +68,180 @@ type FileInfo struct {
 type ScanData struct {
 	Ctx        context.Context
 	CtxCancel  context.CancelFunc
+	StartedAt  time.Time
+	SourceType string
 	Status     ScanStatus
 	ScanID     string
-	Reader     io.ReaderAt
+	File       fs.File
 	Scanner    *format.Scanner
 	LogWriter  *logger.MemoryWriter
 	FilesFound []FileInfo
 	Recovery   *RecoverySession
 }
 
-func (s *ScanData) Copy() *ScanData {
-	return &ScanData{
-		Ctx:        s.Ctx,
-		CtxCancel:  s.CtxCancel,
-		Status:     s.Status,
-		ScanID:     s.ScanID,
-		Reader:     s.Reader,
-		Scanner:    s.Scanner,
-		LogWriter:  s.LogWriter,
-		FilesFound: s.FilesFound,
-		Recovery:   s.Recovery,
-	}
+type ScanInfo struct {
+	ID              string `json:"id"`
+	ScanStartedAt   uint64 `json:"scanStartedAt"`
+	SourcePath      string `json:"sourcePath"`
+	SourceType      string `json:"sourceType"`
+	FilesFound      int    `json:"filesFound"`
+	SignaturesFound int    `json:"signaturesFound"`
+}
+
+type ScanRecord struct {
+	ScanInfo
+	Files []FileInfo `json:"files"`
 }
 
 type ScanAPI struct {
-	currScanData   atomic.Pointer[ScanData]
-	scanInProgress atomic.Bool
+	mu sync.RWMutex
+
+	Store          *store.Store[ScanRecord]
+	currScanData   *ScanData
+	scanInProgress bool
+}
+
+func (s *ScanAPI) SetCurrentScan(scanID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if scanID == "" {
+		return s.resetScan()
+	}
+
+	ts, err := strconv.ParseUint(scanID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid scan id: %s", scanID)
+	}
+
+	rec, err := s.Store.Get(ts)
+	if err != nil {
+		return err
+	}
+
+	data := &ScanData{
+		StartedAt:  time.Unix(int64(rec.ScanStartedAt), 0),
+		Status:     ScanStatusDone,
+		SourceType: rec.SourceType,
+		ScanID:     scanID,
+		File:       nil,
+		Scanner:    nil,
+		FilesFound: rec.Files,
+	}
+	s.currScanData = data
+	return nil
+}
+
+func (s *ScanAPI) resetScan() error {
+	data := s.currScanData
+	if data == nil {
+		return nil
+	}
+
+	if data.Status != ScanStatusScanning {
+		return fmt.Errorf("cannot reset scan")
+	}
+
+	if data.File != nil {
+		data.File.Close()
+	}
+	return nil
 }
 
 func (s *ScanAPI) StartScan(filePath string, outputDir string) (string, error) {
-	scanID, err := s.runScan(filePath)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.scanInProgress {
+		return "", ErrScanInProgress
+	}
+	s.scanInProgress = true
+
+	logger, logWriter := logger.NewInMemory(logger.InfoLevel)
+
+	// TODO: make parameters configurable
+	scanner := format.NewScanner(
+		logger,
+		format.DefaultRegistry,
+		DefaultBufferSize,
+		DefaultBlockSize,
+		DefaultMaxFileSize,
+	)
+
+	f, err := fs.Open(filePath)
 	if err != nil {
+		s.scanInProgress = false
 		return "", err
 	}
+
+	size, isDevice, err := statFile(f, filePath)
+	if err != nil {
+		s.scanInProgress = false
+		return "", err
+	}
+
+	var sourceType string = "image"
+	if isDevice {
+		sourceType = "device"
+	}
+
+	startedAt := time.Now().Truncate(time.Second)
+	scanID := strconv.FormatInt(startedAt.Unix(), 10)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	s.currScanData = &ScanData{
+		Ctx:        ctx,
+		CtxCancel:  cancel,
+		StartedAt:  time.Now().Truncate(time.Second),
+		SourceType: sourceType,
+		Status:     ScanStatusScanning,
+		ScanID:     scanID,
+		File:       f,
+		Scanner:    scanner,
+		LogWriter:  logWriter,
+	}
+
+	filesFound := make([]FileInfo, 0, 10)
+
+	go func() {
+		defer func() {
+			// TODO: file must be closed only when the scan is completely done
+			cancel()
+
+			s.mu.Lock()
+			s.currScanData.Status = ScanStatusDone
+			s.currScanData.FilesFound = filesFound
+			s.scanInProgress = false
+			s.mu.Unlock()
+
+			err := s.Store.Append(ScanRecord{
+				ScanInfo: ScanInfo{
+					ID:              scanID,
+					ScanStartedAt:   uint64(startedAt.Unix()),
+					SourcePath:      filePath,
+					SourceType:      sourceType,
+					FilesFound:      int(scanner.FilesFound()),
+					SignaturesFound: int(scanner.SignaturesFound()),
+				},
+				Files: filesFound,
+			}, uint64(startedAt.Unix()))
+			if err != nil {
+				log.Println("unable to store scan results")
+			}
+		}()
+
+		for fi := range scanner.Scan(ctx, f, uint64(size)) {
+			filesFound = append(filesFound, FileInfo(fi))
+		}
+	}()
 	return scanID, nil
 }
 
 func (s *ScanAPI) PauseScan(scanID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	data, err := s.ensureScanStatus(scanID, ScanStatusScanning)
 	if err != nil {
 		return err
@@ -108,30 +249,28 @@ func (s *ScanAPI) PauseScan(scanID string) error {
 
 	data.Scanner.Pause()
 
-	newData := data.Copy()
-	newData.Status = ScanStatusPaused
-	if !s.currScanData.CompareAndSwap(data, newData) {
-		return fmt.Errorf("unable to update status")
-	}
+	s.currScanData.Status = ScanStatusPaused
 	return nil
 }
 
 func (s *ScanAPI) ResumeScan(scanID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	data, err := s.ensureScanStatus(scanID, ScanStatusPaused)
 	if err != nil {
 		return err
 	}
 	data.Scanner.Resume()
 
-	newData := data.Copy()
-	newData.Status = ScanStatusScanning
-	if !s.currScanData.CompareAndSwap(data, newData) {
-		return fmt.Errorf("unable to update status")
-	}
+	s.currScanData.Status = ScanStatusScanning
 	return nil
 }
 
 func (s *ScanAPI) AbortScan(scanID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	data, err := s.ensureScanStatus(scanID, ScanStatusScanning, ScanStatusPaused)
 	if err != nil {
 		return err
@@ -142,16 +281,12 @@ func (s *ScanAPI) AbortScan(scanID string) error {
 	}
 	data.CtxCancel()
 
-	newData := data.Copy()
-	newData.Status = ScanStatusDone
-	if !s.currScanData.CompareAndSwap(data, newData) {
-		return fmt.Errorf("unable to update status")
-	}
+	s.currScanData.Status = ScanStatusDone
 	return nil
 }
 
 func (s *ScanAPI) ensureScanStatus(scanID string, statuses ...ScanStatus) (*ScanData, error) {
-	data := s.currScanData.Load()
+	data := s.currScanData
 	if data == nil || data.ScanID != scanID {
 		return nil, fmt.Errorf("no scan found with ID %s", scanID)
 	}
@@ -160,6 +295,35 @@ func (s *ScanAPI) ensureScanStatus(scanID string, statuses ...ScanStatus) (*Scan
 		return nil, fmt.Errorf("invalid scan status")
 	}
 	return data, nil
+}
+
+type ScanHistoryRecord struct {
+	ScanInfo
+	IsMissing bool `json:"isMissing"`
+}
+
+func (s *ScanAPI) LoadScanHistory(maxRecords int) ([]ScanHistoryRecord, error) {
+	records, err := s.Store.LoadLast(maxRecords)
+	if err != nil {
+		return nil, err
+	}
+
+	scanInfos := make([]ScanHistoryRecord, len(records))
+	for i, rec := range records {
+		scanInfos[i] = ScanHistoryRecord{
+			ScanInfo: rec.ScanInfo,
+			// TODO: this won't probably work on windows for devices.
+			IsMissing: !osutils.FileExists(rec.SourcePath),
+		}
+	}
+	return scanInfos, nil
+}
+
+func (s *ScanAPI) ClearScanHistory() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.Store.RemoveAll()
 }
 
 type ScanStatusResponse struct {
@@ -171,7 +335,10 @@ type ScanStatusResponse struct {
 }
 
 func (s *ScanAPI) PollStatus(scanID string) (*ScanStatusResponse, error) {
-	data := s.currScanData.Load()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	data := s.currScanData
 	if data == nil || data.ScanID != scanID {
 		return nil, fmt.Errorf("no logs found for scan ID %s", scanID)
 	}
@@ -192,9 +359,11 @@ type ScanResultResponse struct {
 }
 
 func (s *ScanAPI) ScanResult(scanID string) (*ScanResultResponse, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	data, err := s.ensureScanStatus(scanID, ScanStatusDone)
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 
@@ -204,12 +373,12 @@ func (s *ScanAPI) ScanResult(scanID string) (*ScanResultResponse, error) {
 }
 
 func (s *ScanAPI) FileContent(scanID string, name string) (string, error) {
-	data := s.currScanData.Load()
-	if data == nil || data.ScanID != scanID {
-		return "", fmt.Errorf("no logs found for scan ID %s", scanID)
-	}
-	if data.Status != ScanStatusDone {
-		return "", fmt.Errorf("scan %s is not completed yet", scanID)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	data, err := s.ensureScanStatus(scanID, ScanStatusDone)
+	if err != nil {
+		return "", err
 	}
 
 	idx := slices.IndexFunc(data.FilesFound, func(fi FileInfo) bool {
@@ -222,7 +391,7 @@ func (s *ScanAPI) FileContent(scanID string, name string) (string, error) {
 	fi := &data.FilesFound[idx]
 
 	r := io.NewSectionReader(
-		data.Reader,
+		data.File,
 		int64(fi.Offset),
 		int64(fi.Size),
 	)
@@ -244,12 +413,12 @@ type RecoverySession struct {
 }
 
 func (s *ScanAPI) StartRecovery(scanID string, fileNames []string, outputDir string) error {
-	data := s.currScanData.Load()
-	if data == nil || data.ScanID != scanID {
-		return fmt.Errorf("no logs found for scan ID %s", scanID)
-	}
-	if data.Status != ScanStatusDone {
-		return fmt.Errorf("scan %s is not completed yet", scanID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := s.ensureScanStatus(scanID, ScanStatusDone)
+	if err != nil {
+		return err
 	}
 
 	files := make(map[string]bool, len(fileNames))
@@ -271,22 +440,10 @@ func (s *ScanAPI) StartRecovery(scanID string, fileNames []string, outputDir str
 	task := &RecoverySession{
 		TotalBytes: totalBytes,
 	}
-
-	newData := &ScanData{
-		Status:     ScanStatusRecovery,
-		ScanID:     data.ScanID,
-		Reader:     data.Reader,
-		Scanner:    data.Scanner,
-		LogWriter:  data.LogWriter,
-		FilesFound: data.FilesFound,
-		Recovery:   task,
-	}
-	if !s.currScanData.CompareAndSwap(data, newData) {
-		return fmt.Errorf("another recovery task is already in progress")
-	}
+	s.currScanData.Recovery = task
 
 	go func() {
-		r := data.Reader
+		r := data.File
 		for _, fi := range data.FilesFound {
 			if files[fi.Name] {
 				err := recoverFile(r, &fi, outputDir)
@@ -299,8 +456,9 @@ func (s *ScanAPI) StartRecovery(scanID string, fileNames []string, outputDir str
 			}
 		}
 
-		newData.Status = ScanStatusDone
-		s.currScanData.Store(newData)
+		s.mu.Lock()
+		s.currScanData.Status = ScanStatusDone
+		s.mu.Unlock()
 	}()
 	return nil
 }
@@ -312,15 +470,13 @@ type RecoveryStatus struct {
 }
 
 func (s *ScanAPI) RecoveryProgress(scanID string) (*RecoveryStatus, error) {
-	data := s.currScanData.Load()
-	if data == nil || data.ScanID != scanID {
-		return nil, fmt.Errorf("no logs found for scan ID %s", scanID)
-	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	if data.Status != ScanStatusRecovery && data.Status != ScanStatusDone {
-		return nil, fmt.Errorf("no recovery task in progress for scan %s", scanID)
+	data, err := s.ensureScanStatus(scanID, ScanStatusRecovery, ScanStatusDone)
+	if err != nil {
+		return nil, err
 	}
-
 	if data.Recovery == nil {
 		return nil, fmt.Errorf("no recovery session found for scan %s", scanID)
 	}
@@ -349,90 +505,21 @@ func recoverFile(r io.ReaderAt, fi *FileInfo, outDir string) error {
 	return err
 }
 
-func (s *ScanAPI) runScan(filePath string) (string, error) {
-	if !s.scanInProgress.CompareAndSwap(false, true) {
-		return "", ErrScanInProgress
-	}
-
-	logger, logWriter := logger.NewInMemory(logger.InfoLevel)
-
-	// TODO: make parameters configurable
-	scanner := format.NewScanner(
-		logger,
-		format.DefaultRegistry,
-		DefaultBufferSize,
-		DefaultBlockSize,
-		DefaultMaxFileSize,
-	)
-
-	f, err := fs.Open(filePath)
-	if err != nil {
-		s.scanInProgress.Store(false)
-		return "", err
-	}
-
-	size, err := fileSize(f, filePath)
-	if err != nil {
-		s.scanInProgress.Store(false)
-		return "", err
-	}
-
-	scanID := uuid.NewString()
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	s.currScanData.Store(&ScanData{
-		Ctx:       ctx,
-		CtxCancel: cancel,
-		Status:    ScanStatusScanning,
-		ScanID:    scanID,
-		Reader:    f,
-		Scanner:   scanner,
-		LogWriter: logWriter,
-	})
-
-	filesFound := make([]FileInfo, 0, 10)
-
-	go func() {
-		defer func() {
-			// TODO: file must be closed only when the scan is completely done
-			cancel()
-
-			s.currScanData.Store(&ScanData{
-				Ctx:        ctx,
-				CtxCancel:  cancel,
-				Status:     ScanStatusDone,
-				ScanID:     scanID,
-				Reader:     f,
-				Scanner:    scanner,
-				LogWriter:  logWriter,
-				FilesFound: filesFound,
-			})
-			s.scanInProgress.Store(false)
-		}()
-
-		for fi := range scanner.Scan(ctx, f, uint64(size)) {
-			filesFound = append(filesFound, FileInfo(fi))
-		}
-	}()
-	return scanID, nil
-}
-
-func fileSize(f fs.File, path string) (int64, error) {
+func statFile(f fs.File, path string) (int64, bool, error) {
 	devices, err := sysinfo.ListDevices()
 	if err != nil {
-		return -1, err
+		return -1, false, err
 	}
 
 	for _, dev := range devices {
 		if path == dev.Path {
-			return dev.Size, nil
+			return dev.Size, true, nil
 		}
 	}
 
 	stat, err := f.Stat()
 	if err != nil {
-		return -1, err
+		return -1, false, err
 	}
-	return stat.Size(), nil
+	return stat.Size(), false, nil
 }

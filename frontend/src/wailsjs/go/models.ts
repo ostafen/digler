@@ -52,6 +52,30 @@ export namespace api {
 	        this.errors = source["errors"];
 	    }
 	}
+	export class ScanHistoryRecord {
+	    id: string;
+	    scanStartedAt: number;
+	    sourcePath: string;
+	    sourceType: string;
+	    filesFound: number;
+	    signaturesFound: number;
+	    isMissing: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScanHistoryRecord(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.scanStartedAt = source["scanStartedAt"];
+	        this.sourcePath = source["sourcePath"];
+	        this.sourceType = source["sourceType"];
+	        this.filesFound = source["filesFound"];
+	        this.signaturesFound = source["signaturesFound"];
+	        this.isMissing = source["isMissing"];
+	    }
+	}
 	export class ScanResultResponse {
 	    files: FileInfo[];
 	
