@@ -19,9 +19,9 @@
 
 ## Why Digler?
 
-While many data recovery tools exist, few offer a combination of simplicity, flexibility, and modern design focused on deep disk analysis and effective file carving.
+While many data recovery tools exist, few offer the combination of simplicity, flexibility, and modern design with deep disk analysis and effective file carving.
 
-Digler was created to fill this gap by providing a streamlined, plugin-extensible command-line tool that makes data recovery easier and more efficient without the complexity of heavyweight GUIs or fragmented workflows.
+Digler was created to fill this gap by providing a streamlined, plugin-extensible tool for data recovery that’s both powerful and easy to use. It offers both a **command-line interface and a user-friendly desktop application**, making it accessible for professionals and casual users alike. Whether you prefer the speed and scriptability of the CLI or the convenience of a visual interface, Digler adapts to your workflow without the complexity of heavyweight GUIs or fragmented tools.
 
 Built in Go, Digler leverages the language’s strengths in performance, cross-platform support, and maintainability to deliver a fast and dependable solution for today’s data recovery challenges.
 
@@ -38,8 +38,7 @@ Built in Go, Digler leverages the language’s strengths in performance, cross-p
 
 * **Post-Scan Data Recovery**: Utilize the generated DFXML reports to precisely recover specific files.
 
-* **Intuitive Command-Line Interface**:  A user-friendly CLI designed for efficiency and ease of use.
-
+* **Dual Interface Options**: Use Digler through a fast, intuitive command-line interface or a modern desktop application—choose the interface that best fits your workflow.
 ---
 
 ## Installation
@@ -56,7 +55,7 @@ make build
 
 Precompiled binaries are available for Linux, macOS, and Windows on the [Releases page](https://github.com/ostafen/digler/releases).
 
-## Usage
+## CLI Usage
 
 Digler follows a simple but powerful workflow: **scan first, recover later**. This approach lets you analyze disks or images thoroughly before extracting any files.
 
