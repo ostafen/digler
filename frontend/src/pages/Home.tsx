@@ -10,9 +10,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { api } from '../wailsjs/go/models';
 import { LoadScanHistory, SetCurrentScan, ClearScanHistory } from '../wailsjs/go/api/ScanAPI';
 
+const MAX_HISTORY_ITEMS = 20
 
 interface HomeProps {
-  onNavigateToScan: () => void;
+  onNavigateToScan: (mode: 'image' | 'device') => void;
   onOpenRecent: (scanId: string) => void;
 }
 
@@ -31,7 +32,7 @@ export const Home = ({ onNavigateToScan, onOpenRecent }: HomeProps) => {
   useEffect(() => {
     const fetchRecentScans = async () => {
       try {
-        const scanInfo = await LoadScanHistory(10);
+        const scanInfo = await LoadScanHistory(MAX_HISTORY_ITEMS);
         setRecentScans(scanInfo);
       } catch (error) {
         console.error("Error fetching recent scans:", error);
@@ -51,12 +52,6 @@ export const Home = ({ onNavigateToScan, onOpenRecent }: HomeProps) => {
     setCurrentScan("")
     fetchRecentScans();
   }, []);
-
-  /* {loading ? (
-                <p className="text-muted-foreground">Loading recent scans...</p>
-              ) : recentScans.length === 0 ? (
-                <p className="text-muted-foreground">No recent scans found</p>
-              ) : (*/
 
   return (
     <div className="h-screen bg-gradient-subtle overflow-hidden">
@@ -82,7 +77,7 @@ export const Home = ({ onNavigateToScan, onOpenRecent }: HomeProps) => {
           transition={{ duration: 0.6, delay: 0.2 }}
         >
           <Card className="card-elevated hover:scale-105 transition-smooth cursor-pointer"
-            onClick={onNavigateToScan}>
+            onClick={() => onNavigateToScan('image')}>
             <CardHeader className="text-center pb-4">
               <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
                 <Folder className="h-8 w-8 text-primary" />
@@ -101,7 +96,7 @@ export const Home = ({ onNavigateToScan, onOpenRecent }: HomeProps) => {
           </Card>
 
           <Card className="card-elevated hover:scale-105 transition-smooth cursor-pointer"
-            onClick={onNavigateToScan}>
+            onClick={() => onNavigateToScan('device')}>
             <CardHeader className="text-center pb-4">
               <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
                 <HardDrive className="h-8 w-8 text-primary" />
@@ -205,6 +200,6 @@ export const Home = ({ onNavigateToScan, onOpenRecent }: HomeProps) => {
         </motion.div>
 
       </div>
-    </div>
+    </div >
   );
 };

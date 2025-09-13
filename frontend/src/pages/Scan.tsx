@@ -13,17 +13,21 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { DigleLogo } from "@/components/DigleLogo";
 import { OpenFileDialog, OpenFolderDialog } from '../wailsjs/go/app/App';
 import { api } from '../wailsjs/go/models.ts';
-import { WorkingDir, ListDevices } from '../wailsjs/go/api/SystemAPI';
+import { DefaultOutputDir, ListDevices } from '../wailsjs/go/api/SystemAPI';
 import { StartScan, PollStatus, PauseScan, ResumeScan, AbortScan } from '../wailsjs/go/api/ScanAPI';
+import { GetOrSet, SetConfig } from '../wailsjs/go/api/ConfigAPI';
 import { formatFileSize } from '../lib/utils';
 
+const OUT_DIR_CONFIG_KEY = "OUTDIR"
+
 interface ScanProps {
+  mode: "image" | "device";
   onBack: () => void;
   onScanComplete: (results: { filesFound: number, path: string, scanId: string }) => void;
 }
 
-export const Scan = ({ onBack, onScanComplete }: ScanProps) => {
-  const [scanType, setScanTypeState] = useState<"image" | "device">("image");
+export const Scan = ({ onBack, onScanComplete, mode }: ScanProps) => {
+  const [scanType, setScanTypeState] = useState<"image" | "device">(mode);
   const [selectedPath, setSelectedPath] = useState("");
   const [outputPath, setOutputPath] = useState("");
   const [dumpEnabled, setDumpEnabled] = useState(false);
@@ -65,10 +69,13 @@ export const Scan = ({ onBack, onScanComplete }: ScanProps) => {
   };
 
   // Browse for output folder using Wails native dialog
-  const browsePath = async () => {
+  const browseOutputPath = async () => {
     try {
       const folderPath = await OpenFolderDialog();
-      if (folderPath) setOutputPath(folderPath);
+      if (folderPath) {
+        await SetConfig(OUT_DIR_CONFIG_KEY, folderPath);
+        setOutputPath(folderPath);
+      }
     } catch (err) {
       console.error("Folder dialog cancelled or failed", err);
     }
@@ -85,15 +92,11 @@ export const Scan = ({ onBack, onScanComplete }: ScanProps) => {
       }
     };
 
-    // Set default output path to working directory
-    const setDefaultOutputPath = async () => {
-      try {
-        const dir = await WorkingDir();
-        setOutputPath(dir);
-      }
-      catch (err) {
-        console.error("Failed to get working directory", err);
-      }
+    const setDefaultOutputPath = () => {
+      DefaultOutputDir().
+        then(defaultOutputDir => GetOrSet(OUT_DIR_CONFIG_KEY, defaultOutputDir))
+        .then(outDir => setOutputPath(outDir))
+        .catch(err => console.error("Failed to get working directory", err))
     }
 
     fetchDevices();
@@ -342,9 +345,8 @@ export const Scan = ({ onBack, onScanComplete }: ScanProps) => {
                       placeholder="Select an output path"
                       readOnly
                       value={outputPath}
-                      onChange={(e) => setOutputPath(e.target.value)}
                     />
-                    <Button variant="outline" onClick={browsePath}>Browse</Button>
+                    <Button variant="outline" onClick={browseOutputPath}>Browse</Button>
                   </div>
                 </div>
 

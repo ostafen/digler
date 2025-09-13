@@ -22,22 +22,19 @@ package store
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
-	"runtime"
 	"strconv"
-	"strings"
 
 	osutils "github.com/ostafen/digler/pkg/util/os"
 )
 
 var ErrKeyNotFound = errors.New("key not found")
 
-// Store manages an history store with one file per record and keeps directory index in memory as a ring buffer.
-type Store[T any] struct {
+// HistoryStore manages an history store with one file per record and keeps directory index in memory as a ring buffer.
+type HistoryStore[T any] struct {
 	dir        string
 	maxRecords int
 	fileDir    map[uint64]struct{}
@@ -46,18 +43,13 @@ type Store[T any] struct {
 }
 
 // NewStore initializes the store directory and loads existing entries.
-func NewStore[T any](appName string, maxRecords int) (*Store[T], error) {
-	baseDir, user, err := userHistoryDir(appName)
-	if err != nil {
+func NewStore[T any](path string, user *user.User, maxRecords int) (*HistoryStore[T], error) {
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		return nil, err
 	}
 
-	if err := os.MkdirAll(baseDir, 0o755); err != nil {
-		return nil, err
-	}
-
-	s := &Store[T]{
-		dir:        baseDir,
+	s := &HistoryStore[T]{
+		dir:        path,
 		maxRecords: maxRecords,
 		fileDir:    make(map[uint64]struct{}, maxRecords),
 		buf:        NewRingBuffer[uint64](maxRecords),
@@ -70,7 +62,7 @@ func NewStore[T any](appName string, maxRecords int) (*Store[T], error) {
 	return s, nil
 }
 
-func (s *Store[T]) init() error {
+func (s *HistoryStore[T]) init() error {
 	// load existing files in directory
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
@@ -111,7 +103,7 @@ func (s *Store[T]) init() error {
 }
 
 // Append adds a new scan record safely using a temp file created by os.CreateTemp, overwriting oldest if buffer is full.
-func (s *Store[T]) Append(record T, ts uint64) error {
+func (s *HistoryStore[T]) Append(record T, ts uint64) error {
 	filePath := filepath.Join(s.dir, strconv.FormatUint(ts, 10)+".json")
 
 	err := osutils.AtomicWriteFile(filePath, func(f *os.File) error {
@@ -134,7 +126,7 @@ func (s *Store[T]) Append(record T, ts uint64) error {
 	return nil
 }
 
-func (s *Store[T]) chown(filePath string) error {
+func (s *HistoryStore[T]) chown(filePath string) error {
 	if s.user == nil {
 		return nil
 	}
@@ -145,7 +137,7 @@ func (s *Store[T]) chown(filePath string) error {
 	return os.Chown(filePath, uid, gid)
 }
 
-func (s *Store[T]) Get(ts uint64) (T, error) {
+func (s *HistoryStore[T]) Get(ts uint64) (T, error) {
 	_, has := s.fileDir[ts]
 	if !has {
 		var zero T
@@ -154,7 +146,7 @@ func (s *Store[T]) Get(ts uint64) (T, error) {
 	return s.get(ts)
 }
 
-func (s *Store[T]) get(ts uint64) (T, error) {
+func (s *HistoryStore[T]) get(ts uint64) (T, error) {
 	var rec T
 
 	data, err := os.ReadFile(s.fileName(ts))
@@ -166,7 +158,7 @@ func (s *Store[T]) get(ts uint64) (T, error) {
 }
 
 // LoadLast loads the last N scan records in descending order (most recent first).
-func (s *Store[T]) LoadLast(n int) ([]T, error) {
+func (s *HistoryStore[T]) LoadLast(n int) ([]T, error) {
 	if n > s.buf.Len() {
 		n = s.buf.Len()
 	}
@@ -184,7 +176,7 @@ func (s *Store[T]) LoadLast(n int) ([]T, error) {
 	return records, nil
 }
 
-func (s *Store[T]) RemoveAll() error {
+func (s *HistoryStore[T]) RemoveAll() error {
 	for ts := range s.fileDir {
 		os.Remove(s.fileName(ts))
 
@@ -195,49 +187,10 @@ func (s *Store[T]) RemoveAll() error {
 	return nil
 }
 
-func (s *Store[T]) Close() error {
+func (s *HistoryStore[T]) Close() error {
 	return nil
 }
 
-func (s *Store[T]) fileName(ts uint64) string {
+func (s *HistoryStore[T]) fileName(ts uint64) string {
 	return filepath.Join(s.dir, strconv.FormatUint(ts, 10)+".json")
-}
-
-// userHistoryDir returns a directory path to store user-specific history.
-// Works on Linux, macOS, Windows, with or without sudo/admin.
-func userHistoryDir(appName string) (string, *user.User, error) {
-	var u *user.User
-	var home string
-
-	switch runtime.GOOS {
-	case "windows":
-		home = os.Getenv("LOCALAPPDATA")
-		if home == "" {
-			home = os.Getenv("USERPROFILE")
-		}
-		if home == "" {
-			return "", nil, fmt.Errorf("unable to determine home directory on Windows")
-		}
-	default:
-		var err error
-		sudoUser := os.Getenv("SUDO_USER")
-		if sudoUser != "" {
-			u, err = user.Lookup(sudoUser)
-			if err != nil {
-				return "", nil, fmt.Errorf("failed to lookup sudo user %s: %w", sudoUser, err)
-			}
-			home = u.HomeDir
-		} else {
-			home, err = os.UserHomeDir()
-			if err != nil {
-				return "", nil, fmt.Errorf("failed to get current user home directory: %w", err)
-			}
-		}
-	}
-
-	historyDir := filepath.Join(home, fmt.Sprintf(".%s_history", strings.ToLower(appName)))
-	if err := os.MkdirAll(historyDir, 0o755); err != nil {
-		return "", u, fmt.Errorf("failed to create history directory %s: %w", historyDir, err)
-	}
-	return historyDir, u, nil
 }

@@ -192,8 +192,6 @@ const renderPreviewContent = (file: FileItem) => {
   }
 };
 
-
-
 export const Results = ({ onBack, onStartRecovery, scanResults }: ResultsProps) => {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");

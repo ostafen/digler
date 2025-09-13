@@ -21,8 +21,14 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"os/user"
+	"path/filepath"
+	"runtime"
+	"strings"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type App struct {
@@ -40,12 +46,12 @@ type FileDialogFilter struct {
 
 // OpenFileDialog opens a native file picker and returns the absolute path
 func (a *App) OpenFileDialog(title string, filters []FileDialogFilter) (string, error) {
-	runtimeFilters := make([]runtime.FileFilter, len(filters))
+	runtimeFilters := make([]wailsruntime.FileFilter, len(filters))
 	for i, f := range filters {
-		runtimeFilters[i] = runtime.FileFilter{DisplayName: f.Name, Pattern: f.Pattern}
+		runtimeFilters[i] = wailsruntime.FileFilter{DisplayName: f.Name, Pattern: f.Pattern}
 	}
 
-	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+	return wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
 		Title:   title,
 		Filters: runtimeFilters,
 	})
@@ -53,7 +59,63 @@ func (a *App) OpenFileDialog(title string, filters []FileDialogFilter) (string, 
 
 // OpenFolderDialog opens a folder picker
 func (a *App) OpenFolderDialog() (string, error) {
-	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+	return wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
 		Title: "Select output folder",
 	})
+}
+
+// UserDataDir returns a directory path to store user-specific history.
+// Works on Linux, macOS, Windows, with or without sudo/admin.
+func UserDataDir(appName string) (string, *user.User, error) {
+	var u *user.User
+	var home string
+
+	switch runtime.GOOS {
+	case "windows":
+		home = os.Getenv("LOCALAPPDATA")
+		if home == "" {
+			home = os.Getenv("USERPROFILE")
+		}
+		if home == "" {
+			return "", nil, fmt.Errorf("unable to determine home directory on Windows")
+		}
+	default:
+		var err error
+		sudoUser := os.Getenv("SUDO_USER")
+		if sudoUser != "" {
+			u, err = user.Lookup(sudoUser)
+			if err != nil {
+				return "", nil, fmt.Errorf("failed to lookup sudo user %s: %w", sudoUser, err)
+			}
+			home = u.HomeDir
+		} else {
+			home, err = os.UserHomeDir()
+			if err != nil {
+				return "", nil, fmt.Errorf("failed to get current user home directory: %w", err)
+			}
+		}
+	}
+
+	dataDir := strings.ToLower(appName) + "_data"
+	if runtime.GOOS != "windows" {
+		dataDir = "." + dataDir
+	}
+
+	historyDir := filepath.Join(home, dataDir)
+	if err := os.MkdirAll(historyDir, 0o755); err != nil {
+		return "", u, fmt.Errorf("failed to create history directory %s: %w", historyDir, err)
+	}
+	return historyDir, u, nil
+}
+
+func UserHomeDir() (string, error) {
+	sudoUser := os.Getenv("SUDO_USER")
+	if sudoUser != "" {
+		u, err := user.Lookup(sudoUser)
+		if err != nil {
+			return "", fmt.Errorf("failed to lookup sudo user %s: %w", sudoUser, err)
+		}
+		return u.HomeDir, nil
+	}
+	return os.UserHomeDir()
 }

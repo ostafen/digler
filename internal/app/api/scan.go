@@ -96,7 +96,7 @@ type ScanRecord struct {
 type ScanAPI struct {
 	mu sync.RWMutex
 
-	Store          *store.Store[ScanRecord]
+	Store          *store.HistoryStore[ScanRecord]
 	currScanData   *ScanData
 	scanInProgress bool
 }

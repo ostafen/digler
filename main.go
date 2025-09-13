@@ -22,6 +22,8 @@ package main
 import (
 	"context"
 	"embed"
+	"path/filepath"
+	"strings"
 
 	"github.com/ostafen/digler/internal/app"
 	"github.com/ostafen/digler/internal/app/api"
@@ -35,18 +37,34 @@ import (
 var assets embed.FS
 
 const (
-	AppName = "Digler"
+	AppName    = "Digler"
+	HistoryDir = "scan_history"
+	ConfigFile = "config.json"
 
 	Width  = 900
 	Height = 900
 )
 
 func main() {
-	store, err := store.NewStore[api.ScanRecord](AppName, 100)
+	homeDir, err := app.UserHomeDir()
 	exitOnError(err)
 
-	sysAPI := &api.SystemAPI{}
-	scanAPI := &api.ScanAPI{Store: store}
+	dataDir, user, err := app.UserDataDir(AppName)
+	exitOnError(err)
+
+	scanHistoryStore, err := store.NewStore[api.ScanRecord](
+		filepath.Join(dataDir, "scan_history"),
+		user,
+		100,
+	)
+	exitOnError(err)
+
+	configStore, err := store.NewConfigStore(filepath.Join(dataDir, ConfigFile))
+	exitOnError(err)
+
+	sysAPI := api.NewSystemAPI(dataDir, filepath.Join(homeDir, strings.ToLower(AppName)))
+	configAPI := api.NewConfigAPI(configStore)
+	scanAPI := &api.ScanAPI{Store: scanHistoryStore}
 
 	app := &app.App{}
 
@@ -57,10 +75,14 @@ func main() {
 		DisableResize: true,
 		Assets:        assets,
 		OnStartup:     app.Startup,
-		OnShutdown:    func(ctx context.Context) { store.Close() },
+		OnShutdown: func(ctx context.Context) {
+			configStore.Close()
+			scanHistoryStore.Close()
+		},
 		Bind: []any{
 			app,
 			sysAPI,
+			configAPI,
 			scanAPI,
 		},
 		Windows: &windows.Options{

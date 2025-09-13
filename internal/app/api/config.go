@@ -20,54 +20,29 @@
 package api
 
 import (
-	"os"
-
-	"github.com/ostafen/digler/pkg/sysinfo"
+	"github.com/ostafen/digler/internal/app/store"
 )
 
-type SystemAPI struct {
-	dataDir          string
-	defaultOutputDir string
+type ConfigAPI struct {
+	store *store.ConfigStore
 }
 
-func NewSystemAPI(
-	dataDir string,
-	defaultOutputDir string,
-) *SystemAPI {
-	return &SystemAPI{
-		dataDir:          dataDir,
-		defaultOutputDir: defaultOutputDir,
-	}
+func NewConfigAPI(store *store.ConfigStore) *ConfigAPI {
+	return &ConfigAPI{store: store}
 }
 
-func (s *SystemAPI) WorkingDir() (string, error) {
-	return os.Getwd()
+func (s *ConfigAPI) SetConfig(param, value string) error {
+	return s.store.Set(param, value)
 }
 
-func (s *SystemAPI) DataDir() string {
-	return s.dataDir
+func (s *ConfigAPI) GetOrSet(param, defaultValue string) (string, error) {
+	return s.store.GetOrSet(param, defaultValue)
 }
 
-func (s *SystemAPI) DefaultOutputDir() string {
-	return s.defaultOutputDir
+func (s *ConfigAPI) GetConfig(param string) (string, error) {
+	return s.store.Get(param)
 }
 
-type DeviceInfo struct {
-	Name  string `json:"name"`
-	Path  string `json:"path"`
-	Model string `json:"model"`
-	Size  int64  `json:"size"`
-}
-
-func (s *SystemAPI) ListDevices() ([]DeviceInfo, error) {
-	devices, err := sysinfo.ListDevices()
-	if err != nil {
-		return nil, err
-	}
-
-	deviceNames := make([]DeviceInfo, len(devices))
-	for i, device := range devices {
-		deviceNames[i] = DeviceInfo(device)
-	}
-	return deviceNames, nil
+func (s *ConfigAPI) DeleteConfig(param string) error {
+	return s.store.Delete(param)
 }

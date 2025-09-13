@@ -23,31 +23,50 @@ interface FileItem {
 }
 
 const App = () => {
+  const [_, setScreenHistory] = useState<Screen[]>([]);
   const [currentScreen, setCurrentScreen] = useState<Screen>("home");
+  const [scanMode, setScanMode] = useState<'image' | 'device'>('image');
   const [scanResults, setScanResults] = useState<{ filesFound: number; path: string, scanId: string } | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<{ scanId: string, selectedFiles: FileItem[] } | null>(null);
 
-  const navigateToScan = () => setCurrentScreen("scan");
+  const navigateToScreen = (screen: Screen) => {
+    setScreenHistory(prev => [...prev, currentScreen]);
+    setCurrentScreen(screen);
+  }
+
+  const navigateToScan = (mode: 'image' | 'device') => {
+    setScanMode(mode);
+    navigateToScreen("scan");
+  }
+
   const navigateToResults = (results: { filesFound: number; path: string, scanId: string }) => {
     setScanResults(results);
-    setCurrentScreen("results");
+    navigateToScreen("results");
   };
 
   const navigateToRecovery = (results: { scanId: string, selectedFiles: FileItem[] }) => {
     setSelectedFiles(results);
-    setCurrentScreen("recovery");
+    navigateToScreen("recovery");
   };
 
   const navigateHome = () => {
-    setCurrentScreen("home");
+    navigateToScreen("home");
     setScanResults(null);
     setSelectedFiles(null);
   };
 
   const handleOpenRecent = (scanId: string) => {
-    // Mock opening recent scan
-    setScanResults({ filesFound: 0, path: "/Users/john/disk_image.dd", scanId: scanId });
-    setCurrentScreen("results");
+    setScanResults({ filesFound: 0, path: "", scanId: scanId });
+    navigateToScreen("results");
+  };
+
+  const onBack = () => {
+    setScreenHistory(prev => {
+      if (prev.length === 0) return prev;
+      const lastScreen = prev[prev.length - 1];
+      setCurrentScreen(lastScreen);
+      return prev.slice(0, -1);
+    });
   };
 
   const renderCurrentScreen = () => {
@@ -55,14 +74,15 @@ const App = () => {
       case "scan":
         return (
           <Scan
-            onBack={navigateHome}
+            onBack={onBack}
+            mode={scanMode}
             onScanComplete={navigateToResults}
           />
         );
       case "results":
         return (
           <Results
-            onBack={() => setCurrentScreen("scan")}
+            onBack={onBack}
             onStartRecovery={navigateToRecovery}
             scanResults={scanResults!}
           />
@@ -71,7 +91,7 @@ const App = () => {
         return (
           <Recovery
             scanID={selectedFiles.scanId}
-            onBack={() => setCurrentScreen("results")}
+            onBack={onBack}
             onComplete={navigateHome}
             selectedFiles={selectedFiles.selectedFiles}
           />
