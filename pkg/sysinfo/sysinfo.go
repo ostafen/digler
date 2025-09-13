@@ -28,6 +28,15 @@ import (
 	"strings"
 )
 
+// DeviceInfo holds basic information about a storage device or volume.
+type DeviceInfo struct {
+	Name      string // Human-readable name (volume label or model)
+	Path      string // System path (e.g., /dev/nvme01 or C:\)
+	Size      int64  // Total size in bytes
+	Model     string // Hardware model (physical drives only)
+	Removable bool   // True if the device is removable (USB, SD, etc.)
+}
+
 // SysUnknown is a pre-defined SysInfo struct representing unknown system information.
 var SysUnknown = SysInfo{
 	Name:    runtime.GOOS,

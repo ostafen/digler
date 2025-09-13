@@ -52,8 +52,14 @@ func (fi *diskFileInfo) ModTime() time.Time { return fi.modTime }
 func (fi *diskFileInfo) IsDir() bool        { return fi.mode.IsDir() }
 func (fi *diskFileInfo) Sys() interface{}   { return fi.sys }
 
-// OpenWindowsDisk opens a disk/volume for raw reading
+// Open opens a filr or a disk/volume for raw reading
 func Open(path string) (File, error) {
+	// try to open as a regular file first
+	osFile, err := os.Open(path)
+	if err == nil {
+		return osFile, nil
+	}
+
 	handle, err := windows.CreateFile(
 		windows.StringToUTF16Ptr(path),
 		windows.GENERIC_READ,

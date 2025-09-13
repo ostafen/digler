@@ -96,9 +96,15 @@ type ScanRecord struct {
 type ScanAPI struct {
 	mu sync.RWMutex
 
-	Store          *store.HistoryStore[ScanRecord]
+	store          *store.HistoryStore[ScanRecord]
 	currScanData   *ScanData
 	scanInProgress bool
+}
+
+func NewScanAPI(store *store.HistoryStore[ScanRecord]) *ScanAPI {
+	return &ScanAPI{
+		store: store,
+	}
 }
 
 func (s *ScanAPI) SetCurrentScan(scanID string) error {
@@ -114,7 +120,12 @@ func (s *ScanAPI) SetCurrentScan(scanID string) error {
 		return fmt.Errorf("invalid scan id: %s", scanID)
 	}
 
-	rec, err := s.Store.Get(ts)
+	rec, err := s.store.Get(ts)
+	if err != nil {
+		return err
+	}
+
+	f, err := fs.Open(rec.SourcePath)
 	if err != nil {
 		return err
 	}
@@ -124,8 +135,7 @@ func (s *ScanAPI) SetCurrentScan(scanID string) error {
 		Status:     ScanStatusDone,
 		SourceType: rec.SourceType,
 		ScanID:     scanID,
-		File:       nil,
-		Scanner:    nil,
+		File:       f,
 		FilesFound: rec.Files,
 	}
 	s.currScanData = data
@@ -215,7 +225,7 @@ func (s *ScanAPI) StartScan(filePath string, outputDir string) (string, error) {
 			s.scanInProgress = false
 			s.mu.Unlock()
 
-			err := s.Store.Append(ScanRecord{
+			err := s.store.Append(ScanRecord{
 				ScanInfo: ScanInfo{
 					ID:              scanID,
 					ScanStartedAt:   uint64(startedAt.Unix()),
@@ -303,7 +313,7 @@ type ScanHistoryRecord struct {
 }
 
 func (s *ScanAPI) LoadScanHistory(maxRecords int) ([]ScanHistoryRecord, error) {
-	records, err := s.Store.LoadLast(maxRecords)
+	records, err := s.store.LoadLast(maxRecords)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +333,7 @@ func (s *ScanAPI) ClearScanHistory() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.Store.RemoveAll()
+	return s.store.RemoveAll()
 }
 
 type ScanStatusResponse struct {

@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { ProgressBar } from "@/components/ProgressBar";
 import { DigleLogo } from "@/components/DigleLogo";
 import { StartRecovery, RecoveryProgress } from '../wailsjs/go/api/ScanAPI';
+import { OpenFolderDialog } from '../wailsjs/go/app/App';
+import { GetConfig } from '../wailsjs/go/api/ConfigAPI';
 
 interface FileItem {
   id: string;
@@ -38,6 +40,20 @@ export const Recovery = ({ onBack, onComplete, scanID, selectedFiles }: Recovery
   const size = selectedFiles.reduce((acc, item) => acc + parseInt(item.size), 0);
 
   const [totalSize] = useState(size);
+
+  const browseRecoveryPath = async () => {
+    try {
+      const folderPath = await OpenFolderDialog();
+      if (folderPath) setRecoveryPath(folderPath)
+    } catch (err) {
+      console.error("Folder dialog cancelled or failed", err);
+    }
+  };
+
+  useEffect(() => {
+    GetConfig("OUTDIR").
+      then(outDir => setRecoveryPath(outDir))
+  }, []);
 
   useEffect(() => {
     if (isRecovering && !isComplete) {
@@ -153,11 +169,11 @@ ${selectedFiles.map(file => `- ${file.name} (${file.size}) - ${file.status}`).jo
                   <Label>Output Directory</Label>
                   <div className="flex gap-2">
                     <Input
-                      placeholder="/output/recovered_files"
+                      readOnly
                       value={recoveryPath}
                       onChange={(e) => setRecoveryPath(e.target.value)}
                     />
-                    <Button variant="outline">Browse</Button>
+                    <Button variant="outline" onClick={browseRecoveryPath}>Browse</Button>
                   </div>
                 </div>
               </CardContent>

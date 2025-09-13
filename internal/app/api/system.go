@@ -67,7 +67,12 @@ func (s *SystemAPI) ListDevices() ([]DeviceInfo, error) {
 
 	deviceNames := make([]DeviceInfo, len(devices))
 	for i, device := range devices {
-		deviceNames[i] = DeviceInfo(device)
+		deviceNames[i] = DeviceInfo{
+			Name:  device.Name,
+			Path:  device.Path,
+			Model: device.Model,
+			Size:  device.Size,
+		}
 	}
 	return deviceNames, nil
 }

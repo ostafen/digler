@@ -57,6 +57,12 @@ wails-dev:
 wails-build:
 	go run github.com/wailsapp/wails/v2/cmd/wails build
 
+wails-build-all:
+	@for target in $(TARGETS); do \
+		echo "Building for $$target"; \
+		go run github.com/wailsapp/wails/v2/cmd/wails build -platform $$target; \
+	done
+
 # Default plugin source folder
 PLUGIN_SRC ?= plugins
 # Output folder for compiled plugins

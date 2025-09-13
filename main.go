@@ -64,7 +64,7 @@ func main() {
 
 	sysAPI := api.NewSystemAPI(dataDir, filepath.Join(homeDir, strings.ToLower(AppName)))
 	configAPI := api.NewConfigAPI(configStore)
-	scanAPI := &api.ScanAPI{Store: scanHistoryStore}
+	scanAPI := api.NewScanAPI(scanHistoryStore)
 
 	app := &app.App{}
 

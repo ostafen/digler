@@ -17,6 +17,10 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
+
+//go:build !windows
+// +build !windows
+
 package sysinfo
 
 import (
@@ -25,13 +29,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-type DeviceInfo struct {
-	Name  string // Device name, e.g., "sda"
-	Path  string // Device path
-	Model string // Model name, e.g., "Samsung SSD 860"
-	Size  int64  // Size in bytes
-}
 
 // ListDevices lists block devices on a Linux system by reading from /sys/block.
 // It returns a slice of DeviceInfo structs containing the device name, size, and model.

@@ -41,6 +41,14 @@ export const Scan = ({ onBack, onScanComplete, mode }: ScanProps) => {
   const [devices, setDevices] = useState<api.DeviceInfo[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const logEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [scanLogs]);
+
   const setErrorMessageWithTimeout = (msg: string, delay: number) => {
     setErrorMessage(msg)
     setTimeout(() => {
@@ -496,6 +504,9 @@ export const Scan = ({ onBack, onScanComplete, mode }: ScanProps) => {
                       {log}
                     </div>
                   ))}
+
+                  {/* Invisible div to scroll into view */}
+                  <div ref={logEndRef} />
                 </div>
               </CardContent>
             </Card>
