@@ -1,4 +1,5 @@
-BINARY_NAME = digler
+CLI_BINARY_NAME = digler-cli
+WAILS_BINARY_NAME = digler
 MAIN_FILE = cmd/main.go
 OUTPUT_DIR = bin
 
@@ -47,10 +48,10 @@ all: build build-ui wails-deps wails-build-all
 
 build:
 	@mkdir -p $(OUTPUT_DIR)
-	@echo "Building $(BINARY_NAME) version: $(VERSION)"
+	@echo "Building $(CLI_BINARY_NAME) version: $(VERSION)"
 	@for target in $(TARGETS); do \
 		GOOS=$${target%%/*} && GOARCH=$${target##*/}; \
-		output_name="$(BINARY_NAME)-$${GOOS}-$${GOARCH}"; \
+		output_name="$(CLI_BINARY_NAME)-$${GOOS}-$${GOARCH}"; \
 		if [ "$${GOOS}" = "windows" ]; then output_name="$$output_name.exe"; fi; \
 		echo "-> $$output_name"; \
 		GOOS=$$GOOS GOARCH=$$GOARCH go build -ldflags "-X $(ENV_PKG).Version=$(VERSION) -X $(ENV_PKG).CommitHash=$(COMMIT_HASH) -X $(ENV_PKG).BuildTime=$(BUILD_TIME)" -o $(OUTPUT_DIR)/$$output_name $(MAIN_FILE); \
@@ -69,7 +70,6 @@ wails-deps:
 	sudo ln -sf "$$WEBKIT_PC" "$$TARGET_PC"; \
 	echo "Created symlink: $$TARGET_PC -> $$WEBKIT_PC"
 
-
 wails:
 	go run github.com/wailsapp/wails/v2/cmd/wails
 
@@ -82,7 +82,11 @@ wails-build:
 wails-build-all:
 	@for target in $(WAILS_TARGETS); do \
 		echo "Building for $$target"; \
-		go run github.com/wailsapp/wails/v2/cmd/wails build -platform $$target; \
+		GOOS=$${target%%/*} && GOARCH=$${target##*/}; \
+		output_name="$(WAILS_BINARY_NAME)-$${GOOS}-$${GOARCH}"; \
+		if [ "$${GOOS}" = "windows" ]; then output_name="$$output_name.exe"; fi; \
+		echo "-> $$output_name"; \
+		go run github.com/wailsapp/wails/v2/cmd/wails build -platform $$target -o $$output_name; \
 	done
 
 # Default plugin source folder
