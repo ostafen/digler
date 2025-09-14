@@ -1,0 +1,48 @@
+name: Build CLI & Wails
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.21
+      - name: Build CLI binary
+        run: go build -o build/bin/mycli ./cmd/cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-binary
+          path: build/bin/mycli
+
+  wails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Wails system dependencies
+        run: |
+          sudo apt-get update && make wails-deps
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.23
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+      
+      - name: Build UI
+        run: |
+            make build-ui
+            
+      - name: Build Wails app
+        run: |
+            make wails-build-all

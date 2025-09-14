@@ -7,6 +7,17 @@ ENV_PKG = $(MODULE)/internal/env
 
 # Target platforms: os/arch
 TARGETS = linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+WAILS_TARGETS = linux/amd64 windows/amd64
+
+WAILS_LIBS = \
+  libgtk-3-dev \
+  libwebkit2gtk-4.1-dev \
+  libglib2.0-dev \
+  libpango1.0-dev \
+  libgdk-pixbuf2.0-dev \
+  libatk1.0-dev \
+  libcairo2-dev \
+  pkg-config
 
 # Get the latest tag (if any)
 TAG := $(shell git describe --tags --exact-match 2>/dev/null || echo "")
@@ -30,9 +41,9 @@ COMMIT_HASH := $(shell git rev-parse HEAD)
 # Get build time in ISO8601 format
 BUILD_TIME := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-.PHONY: all build build-ui wails-build clean version
+.PHONY: all build build-ui wails-deps wails-build clean version
 
-all: build
+all: build build-ui wails-deps wails-build-all
 
 build:
 	@mkdir -p $(OUTPUT_DIR)
@@ -48,6 +59,9 @@ build:
 build-ui:
 	cd frontend && npm run build
 
+wails-deps:
+	sudo apt install -y $(WAILS_LIBS)
+
 wails:
 	go run github.com/wailsapp/wails/v2/cmd/wails
 
@@ -58,7 +72,7 @@ wails-build:
 	go run github.com/wailsapp/wails/v2/cmd/wails build
 
 wails-build-all:
-	@for target in $(TARGETS); do \
+	@for target in $(WAILS_TARGETS); do \
 		echo "Building for $$target"; \
 		go run github.com/wailsapp/wails/v2/cmd/wails build -platform $$target; \
 	done
