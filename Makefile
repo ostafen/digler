@@ -61,6 +61,8 @@ build-ui:
 
 wails-deps:
 	sudo apt install -y $(WAILS_LIBS)
+	echo "Listing webkit2gtk .pc files:"
+	dpkg -L libwebkit2gtk-4.1-dev
 	sudo ln -s $(dpkg -L libwebkit2gtk-4.1-dev | grep webkit2gtk-4.1.pc) \
          $(dpkg -L libwebkit2gtk-4.1-dev | grep webkit2gtk-4.1.pc | sed 's/4\.1\.pc$/4.0.pc/')
 
