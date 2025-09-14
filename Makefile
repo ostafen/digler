@@ -60,6 +60,7 @@ build-ui:
 	cd frontend && npm install && npm run build
 
 wails-deps:
+	sudo apt install -y $(WAILS_LIBS)
 	@WEBKIT_PC=$$(dpkg -L libwebkit2gtk-4.1-dev | grep webkit2gtk-4.1.pc | head -n1); \
 	if [ -z "$$WEBKIT_PC" ]; then \
 	  echo "Error: webkit2gtk-4.1.pc not found!"; exit 1; \
