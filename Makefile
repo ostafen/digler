@@ -60,11 +60,14 @@ build-ui:
 	cd frontend && npm install && npm run build
 
 wails-deps:
-	sudo apt install -y $(WAILS_LIBS)
-	echo "Listing webkit2gtk .pc files:"
-	dpkg -L libwebkit2gtk-4.1-dev
-	sudo ln -s $(dpkg -L libwebkit2gtk-4.1-dev | grep webkit2gtk-4.1.pc) \
-         $(dpkg -L libwebkit2gtk-4.1-dev | grep webkit2gtk-4.1.pc | sed 's/4\.1\.pc$/4.0.pc/')
+	@WEBKIT_PC=$$(dpkg -L libwebkit2gtk-4.1-dev | grep webkit2gtk-4.1.pc | head -n1); \
+	if [ -z "$$WEBKIT_PC" ]; then \
+	  echo "Error: webkit2gtk-4.1.pc not found!"; exit 1; \
+	fi; \
+	TARGET_PC=$${WEBKIT_PC/4.1.pc/4.0.pc}; \
+	sudo ln -sf "$$WEBKIT_PC" "$$TARGET_PC"; \
+	echo "Created symlink: $$TARGET_PC -> $$WEBKIT_PC"
+
 
 wails:
 	go run github.com/wailsapp/wails/v2/cmd/wails
