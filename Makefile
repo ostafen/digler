@@ -61,6 +61,8 @@ build-ui:
 
 wails-deps:
 	sudo apt install -y $(WAILS_LIBS)
+	sudo ln -s $(dpkg -L libwebkit2gtk-4.1-dev | grep webkit2gtk-4.1.pc) \
+         $(dpkg -L libwebkit2gtk-4.1-dev | grep webkit2gtk-4.1.pc | sed 's/4\.1\.pc$/4.0.pc/')
 
 wails:
 	go run github.com/wailsapp/wails/v2/cmd/wails
