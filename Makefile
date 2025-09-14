@@ -57,7 +57,7 @@ build:
 	done
 
 build-ui:
-	cd frontend && npm run build
+	cd frontend && npm install && npm run build
 
 wails-deps:
 	sudo apt install -y $(WAILS_LIBS)
