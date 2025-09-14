@@ -6,20 +6,6 @@ on:
   pull_request:
 
 jobs:
-  cli:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: 1.21
-      - name: Build CLI binary
-        run: go build -o build/bin/mycli ./cmd/cli
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cli-binary
-          path: build/bin/mycli
-
   wails:
     runs-on: ubuntu-latest
     steps:
