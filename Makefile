@@ -65,7 +65,7 @@ wails-deps:
 	if [ -z "$$WEBKIT_PC" ]; then \
 	  echo "Error: webkit2gtk-4.1.pc not found!"; exit 1; \
 	fi; \
-	TARGET_PC=$${WEBKIT_PC/4.1.pc/4.0.pc}; \
+	TARGET_PC=$$(echo "$$WEBKIT_PC" | sed 's/4\.1\.pc$$/4.0.pc/'); \
 	sudo ln -sf "$$WEBKIT_PC" "$$TARGET_PC"; \
 	echo "Created symlink: $$TARGET_PC -> $$WEBKIT_PC"
 
