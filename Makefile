@@ -11,7 +11,7 @@ WAILS_TARGETS = linux/amd64 windows/amd64
 
 WAILS_LIBS = \
   libgtk-3-dev \
-  libwebkit2gtk-4.0-dev \
+  libwebkit2gtk-4.1-dev \
   libglib2.0-dev \
   libpango1.0-dev \
   libgdk-pixbuf2.0-dev \
