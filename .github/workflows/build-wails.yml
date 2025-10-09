@@ -1,4 +1,4 @@
-name: Build CLI & Wails
+name: Build Desktop App
 
 on:
   push:
