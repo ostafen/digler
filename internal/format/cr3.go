@@ -1,17 +1,22 @@
-// Copyright 2011 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// Package gif implements a GIF image decoder and encoder.
+// Copyright (c) 2025 Stefano Scafiti
 //
-// The GIF specification is at https://www.w3.org/Graphics/GIF/spec-gif89a.txt.
-
-// Copyright 2025 Stefano Scafiti. All rights reserved.
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
 //
-// This file implements a GIF decoder derived from the one in the Go standard library.
-// It has been modified and extended specifically for file carving.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
-// Modifications are licensed under the MIT License; see the LICENSE file for details.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 package format
 
 import (
@@ -33,6 +38,9 @@ var cr3FileHeader = FileHeader{
 	ScanFile:    ScanCr3,
 }
 
+// CR3 files are composed of a series of atoms (chunks) with 32-bit or 64-bit sizes.
+// The scanner recognizes the CR3 magic header and the CanonCR3 marker to validate files.
+// This implementation is adapted from the Python project: https://github.com/WojciechMula/recovercr3/blob/master/recovercr3.py
 func ScanCr3(r *Reader) (*ScanResult, error) {
 	// Check CR3 header
 	magic := make([]byte, len(CR3Magic))
@@ -76,13 +84,13 @@ func ScanCr3(r *Reader) (*ScanResult, error) {
 
 		totalSize += size
 
-		// Stop at last chunk (mdat in Python version)
+		// Stop at last chunk
 		if name == "mdat" {
 			break
 		}
 
-		// Seek to next atom
-		if _, err := r.Discard(int(size - 8)); err != nil { // subtract header size
+		// Seek to next atom, subtract header size
+		if _, err := r.Discard(int(size - 8)); err != nil {
 			return nil, err
 		}
 	}
