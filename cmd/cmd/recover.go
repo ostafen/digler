@@ -45,7 +45,7 @@ Recovered files will be saved to the specified output directory.`,
 		SilenceUsage: true,
 		RunE:         RunRecover,
 	}
-	cmd.Flags().StringP("output-dir", "i", "", "Absolute path to the directory where recovered data will be placed.")
+        cmd.Flags().StringP("output-dir", "o", "", "Absolute path to the directory where recovered data will be placed.")
 	return cmd
 }
 
