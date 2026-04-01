@@ -25,12 +25,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ostafen/digler/internal/disk"
 	"github.com/ostafen/digler/internal/fs"
 	"github.com/ostafen/digler/internal/logger"
 	"github.com/ostafen/digler/internal/scan"
 	"github.com/ostafen/digler/pkg/dfxml"
 	osutils "github.com/ostafen/digler/pkg/util/os"
-	disk "github.com/ostafen/digler/pkg/util/disk"
 	"github.com/spf13/cobra"
 )
 
@@ -46,12 +46,12 @@ Recovered files will be saved to the specified output directory.`,
 		SilenceUsage: true,
 		RunE:         RunRecover,
 	}
-        cmd.Flags().StringP("output-dir", "o", "", "Absolute path to the directory where recovered data will be placed.")
+	cmd.Flags().StringP("output-dir", "o", "", "Absolute path to the directory where recovered data will be placed.")
 	return cmd
 }
 
 func RunRecover(cmd *cobra.Command, args []string) error {
-		path := disk.NormalizeVolumePath(args[0])
+	path := disk.NormalizeVolumePath(args[0])
 	f, err := fs.Open(path)
 	if err != nil {
 		return err
