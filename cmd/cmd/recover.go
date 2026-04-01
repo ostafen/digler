@@ -30,6 +30,7 @@ import (
 	"github.com/ostafen/digler/internal/scan"
 	"github.com/ostafen/digler/pkg/dfxml"
 	osutils "github.com/ostafen/digler/pkg/util/os"
+	disk "github.com/ostafen/digler/pkg/util/disk"
 	"github.com/spf13/cobra"
 )
 
@@ -50,7 +51,8 @@ Recovered files will be saved to the specified output directory.`,
 }
 
 func RunRecover(cmd *cobra.Command, args []string) error {
-	f, err := fs.Open(args[0])
+		path := disk.NormalizeVolumePath(args[0])
+	f, err := fs.Open(path)
 	if err != nil {
 		return err
 	}
