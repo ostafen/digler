@@ -1,0 +1,34 @@
+name: Build Desktop App
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  wails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Wails system dependencies
+        run: |
+          sudo apt-get update && make wails-deps
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.23
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      
+      - name: Build UI
+        run: |
+            make build-ui
+      
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+            
+      - name: Build Wails app
+        run: |
+            make wails-build-all

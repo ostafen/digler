@@ -1,4 +1,5 @@
-BINARY_NAME = digler
+CLI_BINARY_NAME = digler-cli
+WAILS_BINARY_NAME = digler
 MAIN_FILE = cmd/main.go
 OUTPUT_DIR = bin
 
@@ -7,6 +8,17 @@ ENV_PKG = $(MODULE)/internal/env
 
 # Target platforms: os/arch
 TARGETS = linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+WAILS_TARGETS = linux/amd64 windows/amd64
+
+WAILS_LIBS = \
+  libgtk-3-dev \
+  libwebkit2gtk-4.1-dev \
+  libglib2.0-dev \
+  libpango1.0-dev \
+  libgdk-pixbuf2.0-dev \
+  libatk1.0-dev \
+  libcairo2-dev \
+  pkg-config
 
 # Get the latest tag (if any)
 TAG := $(shell git describe --tags --exact-match 2>/dev/null || echo "")
@@ -30,23 +42,33 @@ COMMIT_HASH := $(shell git rev-parse HEAD)
 # Get build time in ISO8601 format
 BUILD_TIME := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-.PHONY: all build build-ui wails-build clean version
+.PHONY: all build build-ui wails-deps wails-build clean version
 
-all: build
+all: build build-ui wails-deps wails-build-all
 
 build:
 	@mkdir -p $(OUTPUT_DIR)
-	@echo "Building $(BINARY_NAME) version: $(VERSION)"
+	@echo "Building $(CLI_BINARY_NAME) version: $(VERSION)"
 	@for target in $(TARGETS); do \
 		GOOS=$${target%%/*} && GOARCH=$${target##*/}; \
-		output_name="$(BINARY_NAME)-$${GOOS}-$${GOARCH}"; \
+		output_name="$(CLI_BINARY_NAME)-$${GOOS}-$${GOARCH}"; \
 		if [ "$${GOOS}" = "windows" ]; then output_name="$$output_name.exe"; fi; \
 		echo "-> $$output_name"; \
 		GOOS=$$GOOS GOARCH=$$GOARCH go build -ldflags "-X $(ENV_PKG).Version=$(VERSION) -X $(ENV_PKG).CommitHash=$(COMMIT_HASH) -X $(ENV_PKG).BuildTime=$(BUILD_TIME)" -o $(OUTPUT_DIR)/$$output_name $(MAIN_FILE); \
 	done
 
 build-ui:
-	cd frontend && npm run build
+	cd frontend && npm install && npm run build
+
+wails-deps:
+	sudo apt install -y $(WAILS_LIBS)
+	@WEBKIT_PC=$$(dpkg -L libwebkit2gtk-4.1-dev | grep webkit2gtk-4.1.pc | head -n1); \
+	if [ -z "$$WEBKIT_PC" ]; then \
+	  echo "Error: webkit2gtk-4.1.pc not found!"; exit 1; \
+	fi; \
+	TARGET_PC=$$(echo "$$WEBKIT_PC" | sed 's/4\.1\.pc$$/4.0.pc/'); \
+	sudo ln -sf "$$WEBKIT_PC" "$$TARGET_PC"; \
+	echo "Created symlink: $$TARGET_PC -> $$WEBKIT_PC"
 
 wails:
 	go run github.com/wailsapp/wails/v2/cmd/wails
@@ -58,9 +80,13 @@ wails-build:
 	go run github.com/wailsapp/wails/v2/cmd/wails build
 
 wails-build-all:
-	@for target in $(TARGETS); do \
+	@for target in $(WAILS_TARGETS); do \
 		echo "Building for $$target"; \
-		go run github.com/wailsapp/wails/v2/cmd/wails build -platform $$target; \
+		GOOS=$${target%%/*} && GOARCH=$${target##*/}; \
+		output_name="$(WAILS_BINARY_NAME)-$${GOOS}-$${GOARCH}"; \
+		if [ "$${GOOS}" = "windows" ]; then output_name="$$output_name.exe"; fi; \
+		echo "-> $$output_name"; \
+		go run github.com/wailsapp/wails/v2/cmd/wails build -platform $$target -o $$output_name; \
 	done
 
 # Default plugin source folder
