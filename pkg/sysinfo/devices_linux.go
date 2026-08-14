@@ -18,8 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !windows
-// +build !windows
+//go:build linux
+// +build linux
 
 package sysinfo
 
@@ -62,10 +62,7 @@ func ListDevices() ([]DeviceInfo, error) {
 		if err != nil {
 			continue
 		}
-		model, err := readFile(modelPath)
-		if err != nil {
-			continue
-		}
+		model, _ := readFile(modelPath)
 
 		devices = append(devices, DeviceInfo{
 			Name:  device,
