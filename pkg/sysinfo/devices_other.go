@@ -17,40 +17,13 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-package disk
 
-import (
-	"runtime"
-	"strings"
-	"unicode"
-)
+//go:build !linux && !darwin && !windows
+// +build !linux,!darwin,!windows
 
-// NormalizeVolumePath checks if a given path is a Windows or macOS volume path
-// and normalizes it:
-// - Windows: "C:" -> "\\.\C:"
-// - macOS (darwin): "/dev/diskX" -> "/dev/rdiskX" (raw character device to avoid EBUSY and increase I/O speed)
-func NormalizeVolumePath(path string) string {
-	path = strings.TrimSpace(path)
+package sysinfo
 
-	if runtime.GOOS == "windows" {
-		path = strings.ReplaceAll(path, "/", `\`)
-		upper := strings.ToUpper(path)
-
-		// Already a raw volume path like \\.\C:
-		if strings.HasPrefix(upper, `\\.\`) {
-			return upper
-		}
-
-		// Handle paths like "C:" or "C:\" (must be drive letter only)
-		if len(upper) >= 2 && upper[1] == ':' && unicode.IsLetter(rune(upper[0])) {
-			// Normalize to \\.\C:
-			return `\\.\` + strings.ToUpper(string(upper[0])) + `:`
-		}
-	} else if runtime.GOOS == "darwin" {
-		if strings.HasPrefix(path, "/dev/disk") {
-			return "/dev/r" + strings.TrimPrefix(path, "/dev/")
-		}
-	}
-
-	return path // Not a volume path requiring normalization
+// ListDevices returns an empty list for unsupported operating systems.
+func ListDevices() ([]DeviceInfo, error) {
+	return []DeviceInfo{}, nil
 }
