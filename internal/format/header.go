@@ -50,6 +50,7 @@ var fileHeaders = []FileHeader{
 	gifFileHeader,
 	pcxFileHeader,
 	tiffFileHeader,
+	cr3FileHeader,
 	// generic/documents formats
 	zipFileHeader,
 	rarFileHeader,
