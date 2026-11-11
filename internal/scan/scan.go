@@ -93,8 +93,8 @@ func ScanPartition(p *disk.Partition, filePath string, opts Options) error {
 
 	scanID := GetScanID()
 
-	var reportFileName string
-	if opts.ReportFile == "" {
+	reportFileName := opts.ReportFile
+	if reportFileName == "" {
 		reportFileName = fmt.Sprintf("report_%s.xml", scanID)
 	}
 

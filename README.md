@@ -98,13 +98,13 @@ This mounts a FUSE filesystem allowing you to browse and access recovered files 
 
 ### 3. Recover Files Based on Scan Report
 ```bash
-foo@bar$ digler recover <image_or_device> <report_file.xml> --dir /path/to/dir
+foo@bar$ digler recover <image_or_device> <report_file.xml> --output-dir /path/to/dir
 ```
 
 Example:
 
 ```bash
-foo@bar$ digler recover dfrws-2006-challenge.raw report.xml --dir ./recover
+foo@bar$ digler recover dfrws-2006-challenge.raw report.xml --output-dir ./recover
 ```
 
 ### Test Datasets
